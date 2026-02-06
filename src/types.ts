@@ -38,6 +38,13 @@ export interface UserStats {
   lastLoginAt: string | null;
 }
 
+export interface TownStatus {
+  townLevel: number;
+  fogCleared: boolean;
+  innRebuilt: boolean;
+  bankRebuilt: boolean;
+}
+
 export interface StoryProgress {
   currentChapter: string;
   clearedChapters: string[];

@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { serveStatic } from 'hono/cloudflare-workers';
-import type { Bindings, QuestionData, StoryProgress, UserProfile, UserStats } from './types';
+import type { Bindings, QuestionData, StoryProgress, TownStatus, UserProfile, UserStats } from './types';
 import { chapters, getChapter, getNextChapter } from './story-data';
 import { generateQuestions } from './questions-data';
 
@@ -33,37 +33,37 @@ const AVATAR_LIST = [
   {
     id: 'knight_cat',
     name: '猫騎士',
-    image: 'https://www.genspark.ai/api/files/s/M9WURAxo',
+    image: '/static/assets/avatars/avatar-knight-cat.png',
   },
   {
     id: 'fox_mage',
     name: '狐の魔術師',
-    image: 'https://www.genspark.ai/api/files/s/DDprzAcZ',
+    image: '/static/assets/avatars/avatar-fox-mage.png',
   },
   {
     id: 'rabbit_paladin',
     name: '白兎の聖騎士',
-    image: 'https://www.genspark.ai/api/files/s/VBeNSiuX',
+    image: '/static/assets/avatars/avatar-rabbit-paladin.png',
   },
   {
     id: 'wolf_guardian',
     name: '狼の守護者',
-    image: 'https://www.genspark.ai/api/files/s/GQDzd3yJ',
+    image: '/static/assets/avatars/avatar-wolf-guardian.png',
   },
   {
     id: 'heroine_knight',
     name: '蒼光の守護騎士',
-    image: 'https://www.genspark.ai/api/files/s/VPIZKmZg',
+    image: '/static/assets/avatars/avatar-heroine-knight.png',
   },
   {
     id: 'queen_mage',
     name: '紫焔の賢妃',
-    image: 'https://www.genspark.ai/api/files/s/T34E4bFC',
+    image: '/static/assets/avatars/avatar-queen-mage.png',
   },
   {
     id: 'male_knight',
     name: '誓約の騎士',
-    image: 'https://www.genspark.ai/api/files/s/1J3zT0iV',
+    image: '/static/assets/avatars/avatar-male-knight.png',
   },
 ];
 
@@ -135,6 +135,30 @@ async function ensureTitlesSeeded(DB: D1Database) {
   await DB.batch(statements);
 }
 
+async function ensureTownStatus(DB: D1Database, employeeId: string) {
+  const row = await DB.prepare('SELECT employee_id FROM town_prosperity WHERE employee_id = ?')
+    .bind(employeeId)
+    .first();
+  if (row) return;
+
+  await DB.prepare(
+    `INSERT INTO town_prosperity (employee_id, town_level, fog_cleared, inn_rebuilt, bank_rebuilt)
+     VALUES (?, 0, 0, 0, 0)`
+  )
+    .bind(employeeId)
+    .run();
+}
+
+const BULLETIN_MESSAGES: Record<string, string> = {
+  chapter1: 'ほうむの さばくが ひかりに つつまれたぞ!',
+  chapter2: 'けいりの めいきゅうが きよめられたぞ!',
+  chapter3: 'じんじの もりの どくが はれたぞ!',
+  chapter4: 'じょうしすの まちに ひかりが もどったぞ!',
+  chapter5: 'ろうむの とけいとうが ときを とりもどしたぞ!',
+  final: 'まおうを たおし せいていが かいふくしたぞ!',
+  bonus: 'しんの しゅごしゃが うまれたぞ!',
+};
+
 async function sendSlack(env: Bindings, eventType: string, message: string, payload: Record<string, unknown>) {
   if (env.SLACK_WEBHOOK_URL) {
     await fetch(env.SLACK_WEBHOOK_URL, {
@@ -153,8 +177,9 @@ async function fetchUserProfile(DB: D1Database, employeeId: string) {
   const userRow = await DB.prepare('SELECT * FROM users WHERE employee_id = ?').bind(employeeId).first();
   const statsRow = await DB.prepare('SELECT * FROM user_stats WHERE employee_id = ?').bind(employeeId).first();
   const storyRow = await DB.prepare('SELECT * FROM story_progress WHERE employee_id = ?').bind(employeeId).first();
+  const townRow = await DB.prepare('SELECT * FROM town_prosperity WHERE employee_id = ?').bind(employeeId).first();
 
-  if (!userRow || !statsRow || !storyRow) {
+  if (!userRow || !statsRow || !storyRow || !townRow) {
     return null;
   }
 
@@ -188,7 +213,14 @@ async function fetchUserProfile(DB: D1Database, employeeId: string) {
     isBonusUnlocked: storyRow.is_bonus_unlocked === 1,
   };
 
-  return { profile, stats, story };
+  const town: TownStatus = {
+    townLevel: townRow.town_level as number,
+    fogCleared: townRow.fog_cleared === 1,
+    innRebuilt: townRow.inn_rebuilt === 1,
+    bankRebuilt: townRow.bank_rebuilt === 1,
+  };
+
+  return { profile, stats, story, town };
 }
 
 // =========================================
@@ -243,6 +275,8 @@ app.post('/api/auth/login', async (c) => {
     ).bind(nickname, avatarId, employeeId).run();
   }
 
+  await ensureTownStatus(DB, employeeId);
+
   const statsRow = await DB.prepare('SELECT * FROM user_stats WHERE employee_id = ?').bind(employeeId).first();
   let streakDays = (statsRow?.streak_days as number) || 0;
   const lastLoginAt = statsRow?.last_login_at ? getDateString(new Date(statsRow.last_login_at as string)) : null;
@@ -290,6 +324,7 @@ app.post('/api/auth/login', async (c) => {
     profile: profileData.profile,
     stats: profileData.stats,
     story: profileData.story,
+    town: profileData.town,
     loginBonus,
   });
 });
@@ -314,6 +349,7 @@ app.get('/api/profile/:employeeId', async (c) => {
     profile: profileData.profile,
     stats: profileData.stats,
     story: profileData.story,
+    town: profileData.town,
     titles: titles.results,
   });
 });
@@ -337,7 +373,8 @@ app.post('/api/story/clear', async (c) => {
   }
 
   const clearedChapters = JSON.parse(progressRow.cleared_chapters as string) as string[];
-  if (!clearedChapters.includes(chapterId)) {
+  const alreadyCleared = clearedChapters.includes(chapterId);
+  if (!alreadyCleared) {
     clearedChapters.push(chapterId);
   }
 
@@ -357,11 +394,43 @@ app.post('/api/story/clear', async (c) => {
     'INSERT INTO chapter_clear_history (player_id, chapter_id) VALUES (?, ?)'
   ).bind(employeeId, chapterId).run();
 
+  if (!alreadyCleared) {
+    const townRow = await DB.prepare('SELECT * FROM town_prosperity WHERE employee_id = ?')
+      .bind(employeeId)
+      .first();
+    const currentLevel = (townRow?.town_level as number) || 0;
+    const newLevel = Math.min(5, currentLevel + 1);
+    const fogCleared = newLevel >= 1 ? 1 : 0;
+    const innRebuilt = newLevel >= 3 ? 1 : 0;
+    const bankRebuilt = newLevel >= 5 ? 1 : 0;
+
+    await DB.prepare(
+      `UPDATE town_prosperity
+       SET town_level = ?, fog_cleared = ?, inn_rebuilt = ?, bank_rebuilt = ?, updated_at = CURRENT_TIMESTAMP
+       WHERE employee_id = ?`
+    ).bind(newLevel, fogCleared, innRebuilt, bankRebuilt, employeeId).run();
+
+    const bulletin = BULLETIN_MESSAGES[chapterId];
+    if (bulletin) {
+      await sendSlack(c.env, 'town_bulletin', `【ごうがい】${bulletin}`, { employeeId, chapterId });
+    }
+  }
+
+  const townRow = await DB.prepare('SELECT * FROM town_prosperity WHERE employee_id = ?')
+    .bind(employeeId)
+    .first();
+
   return c.json({
     currentChapter: newCurrentChapter,
     clearedChapters,
     isFinalBossDefeated: isFinalBossDefeated === 1,
     isBonusUnlocked: isBonusUnlocked === 1,
+    town: {
+      townLevel: (townRow?.town_level as number) || 0,
+      fogCleared: (townRow?.fog_cleared as number) === 1,
+      innRebuilt: (townRow?.inn_rebuilt as number) === 1,
+      bankRebuilt: (townRow?.bank_rebuilt as number) === 1,
+    },
   });
 });
 
@@ -688,6 +757,20 @@ app.post('/api/slack/weekly-post', async (c) => {
   return c.json({ weekStart, top3 });
 });
 
+app.post('/api/slack/bulletin', async (c) => {
+  const { employeeId, chapterId } = await c.req.json();
+
+  if (!employeeId || !chapterId) {
+    return c.json({ error: 'employeeId and chapterId required' }, 400);
+  }
+
+  const bulletin = BULLETIN_MESSAGES[chapterId] || `${chapterId} が きよめられたぞ!`;
+  const message = `【ごうがい】${bulletin}`;
+  await sendSlack(c.env, 'town_bulletin', message, { employeeId, chapterId });
+
+  return c.json({ success: true, chapterId });
+});
+
 app.post('/api/slack/reaction', async (c) => {
   const { DB } = c.env;
   const { employeeId, coinBonus = 10 } = await c.req.json();
@@ -773,14 +856,20 @@ app.get('/', (c) => {
         <title>Compliance Quest 〜エシカル王国の守護者〜</title>
         <script src="https://cdn.tailwindcss.com"></script>
         <link href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css" rel="stylesheet">
+        <link href="/static/style.css" rel="stylesheet">
         <style>
           @keyframes fadeIn {
             from { opacity: 0; transform: translateY(20px); }
             to { opacity: 1; transform: translateY(0); }
           }
           .fade-in { animation: fadeIn 0.8s ease-out; }
-          .bg-hero { background: radial-gradient(circle at top, rgba(76,29,149,0.6), rgba(15,23,42,0.95)); }
-          .glass { background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(14px); }
+          .bg-hero { background: radial-gradient(circle at top, rgba(124,58,237,0.6), rgba(12,18,34,0.92)); }
+          .glass {
+            background: rgba(18, 26, 48, 0.75);
+            border: 1px solid rgba(247, 215, 116, 0.18);
+            backdrop-filter: blur(16px);
+            box-shadow: 0 20px 40px rgba(10, 15, 30, 0.45);
+          }
         </style>
     </head>
     <body class="bg-slate-950 text-white min-h-screen">

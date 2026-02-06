@@ -4,6 +4,7 @@ const AppState = {
   profile: null,
   stats: null,
   story: null,
+  town: null,
   avatars: [],
   chapters: [],
   ranking: null,
@@ -19,21 +20,65 @@ const AppState = {
 };
 
 const AssetUrls = {
-  keyVisual: 'https://www.genspark.ai/api/files/s/MA4YyGZz',
-  worldMap: 'https://www.genspark.ai/api/files/s/BxEpL1CT',
-  monsters: 'https://www.genspark.ai/api/files/s/DFhffuGV',
-  uiAssets: 'https://www.genspark.ai/api/files/s/tN1WHn3z',
-  avatarLineup: 'https://www.genspark.ai/api/files/s/zHXdCk65',
+  keyVisual: '/static/assets/visuals/key-visual.png',
+  worldMap: '/static/assets/visuals/world-map.png',
+  monsters: '/static/assets/visuals/monster-compendium.png',
+  uiAssets: '/static/assets/visuals/ui-assets.png',
+  avatarLineup: '/static/assets/visuals/avatar-lineup.png',
 };
 
 const DomainLabels = {
-  legal: '法務（幻影族）',
-  finance: '経理（強欲族）',
-  hr: '人事（毒霧族）',
-  labor: '労務（怠惰族）',
-  infosec: '情シス（密偵族）',
-  mixed: '混成（古の審判所）',
+  legal: 'ほうむ（げんえいぞく）',
+  finance: 'けいり（よくばりぞく）',
+  hr: 'じんじ（どくぎりぞく）',
+  labor: 'ろうむ（たいだぞく）',
+  infosec: 'じょうしす（みっていぞく）',
+  mixed: 'こんせい（いにしえの しんぱん）',
 };
+
+const TermMap = {
+  コンプライアンス: 'エシカルの ちかい',
+  情報漏洩: 'しろの ひみつを もらす',
+  ハラスメント: 'こころを きずつける わるい じゅもん',
+  経費精算の不正: 'おうこくの きんこから きんかを くすねる',
+  王国: 'おうこく',
+  守護者: 'しゅごしゃ',
+  魔王: 'まおう',
+  賢者: 'けんじゃ',
+  霧: 'きり',
+  旅: 'たび',
+  章: 'しょう',
+  砂漠: 'さばく',
+  迷宮: 'めいきゅう',
+  森: 'もり',
+  城: 'しろ',
+  塔: 'とう',
+  聖域: 'せいいき',
+  解説: 'けんじゃの おしえ',
+  正解: 'せいかい',
+  不正解: 'ちがうぞ',
+};
+
+const CommandLabels = ['こうげき', 'じゅもん', 'ぼうぎょ', 'アイテム'];
+
+function softenText(text) {
+  if (!text) return '';
+  let output = text.replace(/\*\*/g, '');
+  Object.entries(TermMap).forEach(([key, value]) => {
+    output = output.split(key).join(value);
+  });
+  output = output
+    .replace(/。/g, '。 ')
+    .replace(/、/g, '、 ')
+    .replace(/！/g, '！ ')
+    .replace(/\?/g, '? ')
+    .replace(/!/g, '! ');
+  return output;
+}
+
+function getCommandLabel(index) {
+  return CommandLabels[index % CommandLabels.length];
+}
 
 function showToast(message, type = 'info') {
   const app = document.getElementById('app');
@@ -64,6 +109,7 @@ async function login(employeeId, nickname, avatarId) {
   AppState.profile = response.data.profile;
   AppState.stats = response.data.stats;
   AppState.story = response.data.story;
+  AppState.town = response.data.town;
   localStorage.setItem('employeeId', employeeId);
   AppState.employeeId = employeeId;
 
@@ -78,6 +124,7 @@ async function fetchProfile() {
   AppState.profile = response.data.profile;
   AppState.stats = response.data.stats;
   AppState.story = response.data.story;
+  AppState.town = response.data.town;
 }
 
 async function fetchRanking() {
@@ -204,35 +251,41 @@ function renderDashboard() {
           </div>
         </div>
 
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
           <div class="glass rounded-2xl p-6">
-            <h3 class="font-semibold mb-4">今週のスコア</h3>
+            <h3 class="font-semibold mb-4">こんしゅうの スコア</h3>
             <p class="text-3xl font-bold text-yellow-300">${stats.weeklyScore}</p>
-            <p class="text-xs text-slate-400">毎週月曜リセット</p>
+            <p class="text-xs text-slate-400">まいしゅう げつよう りせっと</p>
           </div>
           <div class="glass rounded-2xl p-6">
-            <h3 class="font-semibold mb-4">討伐数サマリ</h3>
+            <h3 class="font-semibold mb-4">とうばつ サマリ</h3>
             <div class="grid grid-cols-2 gap-2 text-sm text-slate-200">
-              <span>法務: ${stats.legalKills}</span>
-              <span>経理: ${stats.financeKills}</span>
-              <span>人事: ${stats.hrKills}</span>
-              <span>労務: ${stats.laborKills}</span>
-              <span>情シス: ${stats.infosecKills}</span>
-              <span>混成: ${stats.mixedKills}</span>
+              <span>ほうむ: ${stats.legalKills}</span>
+              <span>けいり: ${stats.financeKills}</span>
+              <span>じんじ: ${stats.hrKills}</span>
+              <span>ろうむ: ${stats.laborKills}</span>
+              <span>じょうしす: ${stats.infosecKills}</span>
+              <span>こんせい: ${stats.mixedKills}</span>
             </div>
           </div>
           <div class="glass rounded-2xl p-6">
-            <h3 class="font-semibold mb-4">ストーリー進行</h3>
-            <p class="text-sm text-slate-200">現在: ${getChapterTitle(AppState.story.currentChapter)}</p>
-            <p class="text-xs text-slate-400">クリア数: ${AppState.story.clearedChapters.length}</p>
-            <button onclick="renderStorySelect()" class="mt-4 w-full bg-purple-500/80 hover:bg-purple-500 text-white py-2 rounded-lg">ストーリーへ</button>
+            <h3 class="font-semibold mb-4">ものがたり しんこう</h3>
+            <p class="text-sm text-slate-200">いま: ${softenText(getChapterTitle(AppState.story.currentChapter))}</p>
+            <p class="text-xs text-slate-400">クリア すう: ${AppState.story.clearedChapters.length}</p>
+            <button onclick="renderStorySelect()" class="mt-4 w-full bg-purple-500/80 hover:bg-purple-500 text-white py-2 rounded-lg">ものがたりへ</button>
+          </div>
+          <div class="glass rounded-2xl p-6">
+            <h3 class="font-semibold mb-4">じょうか じょうきょう</h3>
+            <p class="text-sm text-slate-200">ふっこう レベル: ${AppState.town?.townLevel ?? 0}</p>
+            <div class="text-xs text-slate-300 mt-2 space-y-1">
+              <p>${AppState.town?.fogCleared ? 'きりが はれた' : 'きりが のこっている'}</p>
+              <p>${AppState.town?.innRebuilt ? 'やどやが もどった' : 'やどやは まだ'}</p>
+              <p>${AppState.town?.bankRebuilt ? 'ぎんこうが ふっかつ' : 'ぎんこうは まいそう'}</p>
+            </div>
           </div>
         </div>
 
-        <div class="grid grid-cols-1 lg:grid-cols-4 gap-4">
-          <button onclick="openQuizModal()" class="bg-yellow-400 text-slate-900 py-4 rounded-xl font-bold">
-            クイズに挑戦
-          </button>
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <button onclick="showRanking()" class="bg-slate-800 text-white py-4 rounded-xl font-bold">
             週次ランキング
           </button>
@@ -251,110 +304,6 @@ function renderDashboard() {
 function getChapterTitle(chapterId) {
   const chapter = AppState.chapters.find((item) => item.id === chapterId);
   return chapter ? `${chapter.title} ${chapter.subtitle}` : 'プロローグ';
-}
-
-function openQuizModal() {
-  const app = document.getElementById('app');
-  const modal = document.createElement('div');
-  modal.className = 'fixed inset-0 bg-black/70 flex items-center justify-center z-50';
-  modal.innerHTML = `
-    <div class="bg-slate-900 rounded-2xl p-6 w-full max-w-md">
-      <h3 class="text-lg font-semibold mb-4">挑戦する領域を選択</h3>
-      <div class="space-y-2">
-        ${Object.entries(DomainLabels)
-          .map(
-            ([domain, label]) => `
-          <label class="flex items-center gap-2">
-            <input type="radio" name="domain" value="${domain}" ${domain === AppState.selectedDomain ? 'checked' : ''}>
-            <span>${label}</span>
-          </label>`
-          )
-          .join('')}
-      </div>
-      <div class="flex gap-2 mt-6">
-        <button onclick="startQuiz()" class="flex-1 bg-yellow-400 text-slate-900 py-2 rounded-lg font-bold">開始</button>
-        <button onclick="closeModal()" class="flex-1 bg-slate-700 py-2 rounded-lg">キャンセル</button>
-      </div>
-    </div>
-  `;
-  app.appendChild(modal);
-
-  window.closeModal = () => modal.remove();
-  window.startQuiz = async () => {
-    const selected = modal.querySelector('input[name="domain"]:checked');
-    AppState.selectedDomain = selected.value;
-    modal.remove();
-    await fetchNextQuestion(AppState.selectedDomain);
-    renderQuiz();
-  };
-}
-
-function renderQuiz() {
-  const app = document.getElementById('app');
-  const question = AppState.currentQuestion;
-
-  app.innerHTML = `
-    <div class="min-h-screen bg-slate-950 p-8">
-      <div class="max-w-4xl mx-auto glass rounded-3xl p-8">
-        <div class="flex items-center justify-between mb-4">
-          <span class="text-sm text-purple-200">領域: ${DomainLabels[question.domain]}</span>
-          <span class="text-sm text-yellow-300">難易度: Lv.${question.difficulty}</span>
-        </div>
-        <h2 class="text-2xl font-bold mb-6">${question.questionText}</h2>
-        <div class="space-y-3">
-          ${question.choices
-            .map(
-              (choice, index) => `
-            <button onclick="answerQuestion(${index})" class="w-full text-left bg-slate-900/70 hover:bg-purple-600/40 py-3 px-4 rounded-xl">
-              ${choice}
-            </button>`
-            )
-            .join('')}
-        </div>
-        <button onclick="renderDashboard()" class="mt-6 text-sm text-slate-300">ダッシュボードへ戻る</button>
-      </div>
-    </div>
-  `;
-}
-
-async function answerQuestion(choiceIndex) {
-  await submitAnswer(choiceIndex);
-  renderResult();
-}
-
-function renderResult() {
-  const app = document.getElementById('app');
-  const result = AppState.lastResult;
-  const question = AppState.currentQuestion;
-
-  app.innerHTML = `
-    <div class="min-h-screen bg-slate-950 p-8">
-      <div class="max-w-3xl mx-auto glass rounded-3xl p-8">
-        <h2 class="text-2xl font-bold mb-4">${result.isCorrect ? '正解' : '不正解'}</h2>
-        <p class="text-slate-200 mb-4">正解: ${question.choices[result.correctIndex]}</p>
-        <div class="bg-slate-900/70 rounded-xl p-4 mb-4">
-          <h3 class="font-semibold mb-2">賢者の知恵</h3>
-          <p class="text-slate-200">${result.explanation}</p>
-        </div>
-        <div class="grid grid-cols-2 gap-4 text-sm text-slate-200">
-          <div>獲得スコア: ${result.score}</div>
-          <div>獲得XP: ${result.xpGained}</div>
-          <div>獲得コイン: ${result.coinsGained}</div>
-          <div>レベルアップ: ${result.levelUp ? 'あり' : 'なし'}</div>
-        </div>
-        ${result.newTitle ? `<p class="text-yellow-300 mt-4">称号獲得: ${result.newTitle}</p>` : ''}
-        <div class="flex gap-2 mt-6">
-          <button onclick="nextQuestion()" class="flex-1 bg-yellow-400 text-slate-900 py-2 rounded-lg font-bold">次の問題</button>
-          <button onclick="renderDashboard()" class="flex-1 bg-slate-700 py-2 rounded-lg">ダッシュボード</button>
-        </div>
-      </div>
-    </div>
-  `;
-}
-
-async function nextQuestion() {
-  await fetchNextQuestion(AppState.selectedDomain);
-  renderQuiz();
 }
 
 function renderStorySelect() {
@@ -377,8 +326,8 @@ function renderStorySelect() {
               <div class="bg-slate-900/70 p-4 rounded-xl ${locked ? 'opacity-50' : 'cursor-pointer'}" ${
                 locked ? '' : `onclick="openStory('${chapter.id}')"`
               }>
-                <h3 class="font-semibold">${chapter.title} ${chapter.subtitle}</h3>
-                <p class="text-xs text-slate-400">${chapter.category}</p>
+                <h3 class="font-semibold">${softenText(`${chapter.title} ${chapter.subtitle}`)}</h3>
+                <p class="text-xs text-slate-400">${softenText(chapter.category)}</p>
               </div>`;
             })
             .join('')}
@@ -388,42 +337,282 @@ function renderStorySelect() {
   `;
 }
 
+function getStoryDomain(chapterId) {
+  const mapping = {
+    chapter1: 'legal',
+    chapter2: 'finance',
+    chapter3: 'hr',
+    chapter4: 'infosec',
+    chapter5: 'labor',
+    final: 'mixed',
+    bonus: 'mixed',
+  };
+  return mapping[chapterId] || 'legal';
+}
+
+function getStorySpeaker(index, chapter) {
+  const domain = getStoryDomain(chapter.id);
+  const domainLabel = DomainLabels[domain] || 'しゅごしゃ';
+  if (chapter.id === 'prologue') {
+    return index % 2 === 0 ? 'おうこくの かたりべ' : 'だいけんじゃ アウレリア';
+  }
+  return index % 2 === 0 ? 'かたりべ' : `${domainLabel}の ししゃ`;
+}
+
+function buildQuizTriggers(chapter) {
+  const totalTriggers = chapter.id === 'bonus' || chapter.id === 'final' ? 3 : 2;
+  const triggers = [];
+  for (let i = 1; i <= totalTriggers; i += 1) {
+    const idx = Math.max(1, Math.floor((chapter.narration.length * i) / (totalTriggers + 1)) - 1);
+    triggers.push(idx);
+  }
+  return triggers;
+}
+
 function openStory(chapterId) {
   const chapter = AppState.chapters.find((item) => item.id === chapterId);
   if (!chapter) return;
-  AppState.currentStory = { chapter, index: 0 };
-  renderStoryNarration();
+
+  AppState.currentStory = {
+    chapter,
+    index: 0,
+    quizTriggers: buildQuizTriggers(chapter),
+    quizPointer: 0,
+    waitingQuiz: false,
+    quizResult: null,
+    battle: {
+      playerHp: 6,
+      enemyHp: 6,
+      maxPlayerHp: 6,
+      maxEnemyHp: 6,
+      timeLimit: 12,
+      timeLeft: 12,
+      timerId: null,
+      lastEffect: '',
+    },
+  };
+  renderStoryScene();
 }
 
-function renderStoryNarration() {
+async function handleStoryAdvance() {
+  const story = AppState.currentStory;
+  if (!story) return;
+  if (story.waitingQuiz || story.quizResult) return;
+
+  const nextIndex = Math.min(story.index + 1, story.chapter.narration.length - 1);
+  story.index = nextIndex;
+
+  const trigger = story.quizTriggers[story.quizPointer];
+  if (trigger !== undefined && nextIndex >= trigger) {
+    story.waitingQuiz = true;
+    story.quizPointer += 1;
+    await fetchNextQuestion(getStoryDomain(story.chapter.id));
+    startStoryTimer();
+  }
+
+  renderStoryScene();
+}
+
+function startStoryTimer() {
+  const story = AppState.currentStory;
+  if (!story?.battle) return;
+  stopStoryTimer();
+  story.battle.timeLeft = story.battle.timeLimit;
+
+  story.battle.timerId = setInterval(() => {
+    story.battle.timeLeft = Math.max(0, story.battle.timeLeft - 1);
+    if (story.battle.timeLeft <= 0) {
+      stopStoryTimer();
+      handleStoryTimeout();
+      return;
+    }
+    renderStoryScene();
+  }, 1000);
+}
+
+function stopStoryTimer() {
+  const story = AppState.currentStory;
+  if (story?.battle?.timerId) {
+    clearInterval(story.battle.timerId);
+    story.battle.timerId = null;
+  }
+}
+
+async function handleStoryTimeout() {
+  const story = AppState.currentStory;
+  if (!story?.battle) return;
+  story.waitingQuiz = false;
+  story.quizResult = true;
+  story.battle.playerHp = Math.max(0, story.battle.playerHp - 2);
+  story.battle.lastEffect = 'じかんぎれ! まものの こうげき!';
+  AppState.lastResult = {
+    isCorrect: false,
+    correctIndex: AppState.currentQuestion?.correctIndex ?? 0,
+    explanation: 'じかんぎれに きをつけよう。',
+    score: 0,
+    xpGained: 0,
+    coinsGained: 0,
+    levelUp: false,
+  };
+  renderStoryScene();
+}
+
+function renderStoryScene() {
   const app = document.getElementById('app');
-  const { chapter, index } = AppState.currentStory;
-  const isLast = index >= chapter.narration.length - 1;
+  const story = AppState.currentStory;
+  const chapter = story.chapter;
+  const line = softenText(chapter.narration[story.index]);
+  const isLast = story.index >= chapter.narration.length - 1;
+  const speaker = softenText(getStorySpeaker(story.index, chapter));
+  const nextHint = story.waitingQuiz || story.quizResult ? 'クイズに こたえよう' : 'クリックで つぎへ';
+  const avatar = AppState.avatars.find((item) => item.id === AppState.profile?.avatarId);
 
   app.innerHTML = `
-    <div class="min-h-screen bg-slate-900 p-8">
-      <div class="max-w-4xl mx-auto glass rounded-3xl p-8">
-        <h2 class="text-2xl font-bold mb-2">${chapter.title} ${chapter.subtitle}</h2>
-        <p class="text-sm text-slate-300 mb-4">${chapter.category}</p>
-        <div class="space-y-4 text-slate-100">
-          ${chapter.narration.slice(0, index + 1).map((line) => `<p>${line}</p>`).join('')}
-        </div>
-        <div class="flex gap-2 mt-6">
-          ${
-            isLast
-              ? `<button onclick="clearStory('${chapter.id}')" class="flex-1 bg-green-500 py-2 rounded-lg">章をクリア</button>`
-              : `<button onclick="nextStory()" class="flex-1 bg-yellow-400 text-slate-900 py-2 rounded-lg">続きへ</button>`
-          }
-          <button onclick="renderStorySelect()" class="flex-1 bg-slate-700 py-2 rounded-lg">章選択へ</button>
+    <div class="min-h-screen bg-slate-950 p-8" style="background-image: linear-gradient(rgba(15,23,42,0.6), rgba(12,18,34,0.85)), url('${AssetUrls.keyVisual}'); background-size: cover; background-position: center;">
+      <div class="max-w-6xl mx-auto">
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div class="lg:col-span-2 space-y-4">
+            <div class="glass rounded-3xl p-6">
+              <h2 class="text-2xl font-bold">${softenText(`${chapter.title} ${chapter.subtitle}`)}</h2>
+              <p class="text-sm text-slate-300">${softenText(chapter.category)}</p>
+            </div>
+            <div class="dq-dialog" onclick="handleStoryAdvance()">
+              <p class="dq-speaker">${speaker}</p>
+              <p class="text-lg text-slate-100 mt-2">${line || ''}</p>
+              <p class="dq-next mt-2">${nextHint}</p>
+            </div>
+            ${story.waitingQuiz ? renderStoryQuizPanel() : ''}
+            ${story.quizResult ? renderStoryResultPanel() : ''}
+            <div class="flex gap-3 mt-2">
+              ${isLast && !story.waitingQuiz && !story.quizResult ? `<button onclick="clearStory('${chapter.id}')" class="dq-button">章をクリア</button>` : ''}
+              <button onclick="renderStorySelect()" class="dq-button-secondary">章選択へ</button>
+            </div>
+          </div>
+          <div class="space-y-4">
+            <div class="glass rounded-3xl p-6">
+              <h3 class="font-semibold mb-4">登場人物</h3>
+              <div class="grid grid-cols-2 gap-3 text-center text-xs text-slate-200">
+                <div>
+                  <img src="${avatar?.image || AssetUrls.avatarLineup}" alt="guardian" class="dq-portrait w-full h-28 object-cover" />
+                  <p class="mt-2">しゅごしゃ</p>
+                </div>
+                <div>
+                  <img src="${AssetUrls.monsters}" alt="enemy" class="dq-portrait w-full h-28 object-cover object-left" />
+                  <p class="mt-2">てき せいりょく</p>
+                </div>
+              </div>
+            </div>
+            <div class="glass rounded-3xl p-6">
+              <h3 class="font-semibold mb-4">敵勢力レポート</h3>
+              <img src="${AssetUrls.monsters}" alt="monsters" class="rounded-2xl shadow-xl" />
+            </div>
+          </div>
         </div>
       </div>
     </div>
   `;
 }
 
-function nextStory() {
-  AppState.currentStory.index += 1;
-  renderStoryNarration();
+function renderStoryQuizPanel() {
+  const question = AppState.currentQuestion;
+  const battle = AppState.currentStory?.battle;
+  const timeRatio = battle ? Math.round((battle.timeLeft / battle.timeLimit) * 100) : 0;
+  return `
+    <div class="dq-quiz" onclick="event.stopPropagation()">
+      <div class="flex items-center justify-between mb-3">
+        <span class="text-sm text-purple-200">${DomainLabels[question.domain]}</span>
+        <span class="text-sm text-yellow-300">たたかい じかん: ${battle?.timeLeft ?? 0}びょう</span>
+      </div>
+      <div class="dq-hp mb-4">
+        <div>
+          <p class="text-xs text-slate-300">しゅごしゃ HP</p>
+          <div class="dq-hp-bar"><span style="width:${battle ? (battle.playerHp / battle.maxPlayerHp) * 100 : 0}%"></span></div>
+        </div>
+        <div>
+          <p class="text-xs text-slate-300">まもの HP</p>
+          <div class="dq-hp-bar dq-hp-enemy"><span style="width:${battle ? (battle.enemyHp / battle.maxEnemyHp) * 100 : 0}%"></span></div>
+        </div>
+      </div>
+      <div class="dq-timer">
+        <span style="width:${timeRatio}%"></span>
+      </div>
+      <h3 class="text-xl font-semibold mb-4">${softenText(question.questionText)}</h3>
+      <div class="space-y-3">
+        ${question.choices
+          .map(
+            (choice, index) => `
+          <button onclick="answerStoryQuestion(${index}); event.stopPropagation();" class="dq-choice">
+            <span class="dq-command">${getCommandLabel(index)}</span>
+            <span>${softenText(choice)}</span>
+          </button>`
+          )
+          .join('')}
+      </div>
+    </div>
+  `;
+}
+
+function renderStoryResultPanel() {
+  const result = AppState.lastResult;
+  const question = AppState.currentQuestion;
+  const battle = AppState.currentStory?.battle;
+  const isDefeated = battle && battle.playerHp <= 0;
+  return `
+    <div class="dq-quiz" onclick="event.stopPropagation()">
+      <h3 class="text-xl font-semibold mb-2">${result.isCorrect ? 'せいかい' : 'ちがうぞ'}</h3>
+      <p class="text-slate-200 mb-3">こたえ: ${softenText(question.choices[result.correctIndex])}</p>
+      ${battle?.lastEffect ? `<p class="text-yellow-200 mb-3">${battle.lastEffect}</p>` : ''}
+      ${isDefeated ? '<p class="text-red-300 mb-3">しゅごしゃは たおれた...</p>' : ''}
+      <div class="bg-slate-900/70 rounded-xl p-4">
+        <h4 class="font-semibold mb-2">けんじゃの おしえ</h4>
+        <p class="text-slate-200">${softenText(result.explanation)}</p>
+      </div>
+      <div class="flex gap-2 mt-4">
+        <button onclick="closeStoryResult()" class="dq-button">${isDefeated ? 'もういちど たちあがる' : 'ぼうけんを つづける'}</button>
+      </div>
+    </div>
+  `;
+}
+
+async function answerStoryQuestion(choiceIndex) {
+  stopStoryTimer();
+  await submitAnswer(choiceIndex);
+  const story = AppState.currentStory;
+  const battle = story?.battle;
+  story.waitingQuiz = false;
+  story.quizResult = true;
+
+  if (battle) {
+    const timeMs = Math.round(performance.now() - AppState.quizStartTime);
+    const isFast = timeMs <= 4000;
+    if (AppState.lastResult?.isCorrect) {
+      const damage = isFast ? 3 : 2;
+      battle.enemyHp = Math.max(0, battle.enemyHp - damage);
+      battle.lastEffect = isFast ? 'かいしんの いちげき!' : 'こうげきが きまった!';
+      if (battle.enemyHp <= 0) {
+        battle.lastEffect += ' まものを たおした!';
+      }
+    } else {
+      battle.playerHp = Math.max(0, battle.playerHp - 2);
+      battle.lastEffect = 'まものの こうげき!';
+    }
+  }
+
+  renderStoryScene();
+}
+
+function closeStoryResult() {
+  const story = AppState.currentStory;
+  const battle = story?.battle;
+  story.quizResult = null;
+
+  if (battle && battle.playerHp <= 0) {
+    battle.playerHp = battle.maxPlayerHp;
+    battle.enemyHp = battle.maxEnemyHp;
+    battle.lastEffect = 'たちなおした!';
+  }
+
+  renderStoryScene();
 }
 
 async function clearStory(chapterId) {
@@ -431,8 +620,14 @@ async function clearStory(chapterId) {
     employeeId: AppState.employeeId,
     chapterId,
   });
-  AppState.story = response.data;
-  showToast('チャプターをクリアしました', 'success');
+  AppState.story = {
+    currentChapter: response.data.currentChapter,
+    clearedChapters: response.data.clearedChapters,
+    isFinalBossDefeated: response.data.isFinalBossDefeated,
+    isBonusUnlocked: response.data.isBonusUnlocked,
+  };
+  AppState.town = response.data.town || AppState.town;
+  showToast('チャプターを クリアした!', 'success');
   renderStorySelect();
 }
 
