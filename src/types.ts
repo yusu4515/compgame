@@ -15,18 +15,56 @@ export interface Chapter {
   order: number;
 }
 
-/**
- * プレイヤー進行状況
- */
-export interface PlayerProgress {
-  playerId: string;
+export interface UserProfile {
+  employeeId: string;
   nickname: string;
+  avatarId: string;
+  level: number;
+  xp: number;
+  coins: number;
+  currentArea: string;
+  titlePrimary: string | null;
+}
+
+export interface UserStats {
+  legalKills: number;
+  financeKills: number;
+  hrKills: number;
+  laborKills: number;
+  infosecKills: number;
+  mixedKills: number;
+  streakDays: number;
+  weeklyScore: number;
+  lastLoginAt: string | null;
+}
+
+export interface StoryProgress {
   currentChapter: string;
   clearedChapters: string[];
   isFinalBossDefeated: boolean;
   isBonusUnlocked: boolean;
-  createdAt: string;
-  updatedAt: string;
+}
+
+export interface QuestionData {
+  id?: number;
+  domain: string;
+  tribe: string;
+  difficulty: number;
+  questionText: string;
+  choices: string[];
+  correctIndex: number;
+  explanation: string;
+}
+
+export interface AnswerResult {
+  isCorrect: boolean;
+  correctIndex: number;
+  explanation: string;
+  score: number;
+  xpGained: number;
+  coinsGained: number;
+  levelUp: boolean;
+  newTitle?: string | null;
 }
 
 /**
@@ -34,4 +72,5 @@ export interface PlayerProgress {
  */
 export interface Bindings {
   DB: D1Database;
+  SLACK_WEBHOOK_URL?: string;
 }

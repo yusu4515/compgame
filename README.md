@@ -2,345 +2,154 @@
 
 ## 📖 プロジェクト概要
 
-**Compliance Quest**は、コンプライアンスを楽しく学べるストーリーベースRPGゲームです。エシカル王国を舞台に、5つの分野(法務・経理・人事・情シス・労務)の不祥事を解決しながら、コンプライアンスの重要性を体験的に学びます。
+**Compliance Quest**は、全従業員がRPG体験を通じてコンプライアンス知識を学ぶ長期運用型の教育ゲームです。法務・経理・人事・情シス・労務の5分野を「五つの聖域」として物語化し、500問以上の問題を段階的に学習します。
 
 ### 🎮 ゲームの特徴
-- **ビジュアルノベル形式**: 美しいグラデーション背景とアニメーション演出
-- **ストーリー進行管理**: 各チャプターのクリア状態を自動保存
-- **進行状況の永続化**: Cloudflare D1データベースで進捗を管理
-- **レスポンシブデザイン**: スマートフォン・タブレット対応
+- **長期運用設計**: レベル・称号・週次ランキングで数か月の育成体験
+- **500問以上のクイズ**: 各分野 + 複合問題で計530問を自動生成
+- **ストーリー進行管理**: 章クリアフラグとナレーション演出
+- **Slack連携**: ログイン/レベルアップ/称号/週次TOP3通知
+- **管理画面**: 問題の編集・レビューを可能にする簡易エディタ
 
 ---
 
 ## 🌐 公開URL
 
 ### 開発環境(Sandbox)
-- **アプリケーション**: https://3000-ix84xtfbreeasj8vuvc8y-8f57ffe2.sandbox.novita.ai
-- **API エンドポイント**: https://3000-ix84xtfbreeasj8vuvc8y-8f57ffe2.sandbox.novita.ai/api/chapters
+- **アプリケーション**: 未起動（起動手順は後述）
+- **API エンドポイント例**: `/api/chapters`, `/api/questions/next`
 
 ### 本番環境
 - まだデプロイされていません
 
 ---
 
-## 🎯 実装済み機能
+## 🎨 生成済みキービジュアル/素材
 
-### ✅ 完了した機能
-1. **ストーリーシステム**
-   - プロローグ、第1章〜第5章、終章、ボーナスステージの8チャプター
-   - 各チャプターのナレーション表示システム
-   - チャプター進行度の視覚的表示
+- **キービジュアル**: https://www.genspark.ai/api/files/s/MA4YyGZz
+- **ワールドマップ**: https://www.genspark.ai/api/files/s/BxEpL1CT
+- **モンスター図鑑**: https://www.genspark.ai/api/files/s/DFhffuGV
+- **UIアセット**: https://www.genspark.ai/api/files/s/tN1WHn3z
+- **アバターラインナップ**: https://www.genspark.ai/api/files/s/zHXdCk65
 
-2. **進行管理システム**
-   - プレイヤー新規作成(ニックネーム登録)
-   - チャプタークリア記録
-   - 進行状況の自動保存(LocalStorage + D1)
-   - 進行状況リセット機能
+---
 
-3. **データベース統合**
-   - Cloudflare D1による永続化
-   - `player_progress`テーブル(プレイヤー進行状況)
-   - `chapter_clear_history`テーブル(クリア履歴)
+## ✅ 実装済み機能
 
-4. **UI/UX**
-   - ビジュアルノベル風のストーリー表示
-   - 各チャプター専用のグラデーション背景
-   - フェードイン/アニメーション効果
-   - ボーナスステージ解放演出
+### コアゲーム
+- ユーザー作成（従業員ID + ニックネーム）
+- アバター選択
+- レベル/XP/コイン/称号
+- 週次ランキング
+- ストーリー進行（クリアフラグ）
 
-5. **API エンドポイント**
-   - `GET /api/chapters` - 全チャプター情報取得
-   - `GET /api/chapters/:id` - 特定チャプター取得
-   - `GET /api/progress/:playerId` - 進行状況取得
-   - `POST /api/progress` - プレイヤー新規作成
-   - `POST /api/progress/:playerId/clear/:chapterId` - チャプタークリア
-   - `DELETE /api/progress/:playerId` - 進行状況リセット
+### クイズ機能
+- 530問自動生成
+- 出題API + 回答API
+- 正誤判定 + 解説表示
+- スコア計算（難易度 × 時間補正）
+
+### 管理機能
+- 問題一覧
+- 問題編集（問題文/選択肢/正解/解説）
+
+### Slack連携
+- デイリーログイン通知
+- レベルアップ通知
+- 称号獲得通知
+- 週次TOP3投稿
+- 応援リアクションによるコイン付与
 
 ---
 
 ## 🚧 未実装機能
 
-### 📝 今後の実装予定
-1. **クイズ/問題システム**
-   - 各チャプターでコンプライアンスに関する選択肢問題を出題
-   - 正解/不正解によるストーリー分岐
-   - スコアリング機能
-
-2. **ランキングシステム**
-   - 全プレイヤーのクリアタイム/スコアランキング
-   - ボーナスステージクリア者の殿堂入り
-
-3. **アチーブメントシステム**
-   - 特定条件達成でバッジ獲得
-   - コレクション要素の追加
-
-4. **サウンド/BGM**
-   - 各チャプターのBGM
-   - 効果音(ボタンクリック、クリア音など)
+- 本格的な管理画面権限管理（SSO連携）
+- 問題の承認フロー（法務/経理など部門別レビュー）
+- 本番デプロイ（Cloudflare Pages）
 
 ---
 
 ## 📊 データアーキテクチャ
 
-### データモデル
+### テーブル
+- `users` : 従業員ID, ニックネーム, Lv, XP, コイン, 称号
+- `user_stats` : 討伐数, 週次スコア, 連続ログイン
+- `story_progress` : 章クリアフラグ
+- `questions` : 530問
+- `quiz_attempts` : 回答履歴
+- `titles` / `user_titles`
+- `weekly_rankings`
+- `slack_events`
 
-#### `player_progress` テーブル
-| カラム名 | 型 | 説明 |
-|---------|-----|------|
-| player_id | TEXT | プレイヤーID(主キー) |
-| nickname | TEXT | ニックネーム |
-| current_chapter | TEXT | 現在のチャプターID |
-| cleared_chapters | TEXT | クリア済みチャプター(JSON配列) |
-| is_final_boss_defeated | INTEGER | 魔王討伐フラグ(0/1) |
-| is_bonus_unlocked | INTEGER | ボーナスステージ解放フラグ(0/1) |
-| created_at | DATETIME | 作成日時 |
-| updated_at | DATETIME | 更新日時 |
-
-#### `chapter_clear_history` テーブル
-| カラム名 | 型 | 説明 |
-|---------|-----|------|
-| id | INTEGER | 履歴ID(主キー) |
-| player_id | TEXT | プレイヤーID(外部キー) |
-| chapter_id | TEXT | チャプターID |
-| cleared_at | DATETIME | クリア日時 |
-
-### ストレージサービス
-- **Cloudflare D1**: プレイヤー進行状況とクリア履歴の永続化
+### ストレージ
+- Cloudflare D1
 
 ---
 
-## 🛠️ 技術スタック
+## 🧭 API エンドポイント
 
-### Backend
-- **Hono** (v4.11.7) - 軽量Webフレームワーク
-- **Cloudflare Workers** - エッジランタイム
-- **Cloudflare D1** - SQLiteベースのグローバル分散データベース
+### 認証/ユーザー
+- `POST /api/auth/login`
+- `GET /api/profile/:employeeId`
+- `GET /api/avatars`
 
-### Frontend
-- **TailwindCSS** (CDN) - ユーティリティファーストCSS
-- **Font Awesome** (v6.4.0) - アイコンライブラリ
-- **Axios** (v1.6.0) - HTTPクライアント
-- **Vanilla JavaScript** - フロントエンドロジック
+### ストーリー
+- `GET /api/chapters`
+- `POST /api/story/clear`
 
-### Development Tools
-- **Vite** (v6.3.5) - ビルドツール
-- **Wrangler** (v4.4.0) - Cloudflare CLI
-- **PM2** - プロセスマネージャー(開発環境)
-- **Git** - バージョン管理
+### クイズ
+- `GET /api/questions/next?employeeId=...&domain=...`
+- `POST /api/questions/answer`
+
+### ランキング
+- `GET /api/ranking/weekly`
+
+### 管理
+- `GET /api/admin/questions?limit=10&offset=0&domain=legal`
+- `PUT /api/admin/questions/:id`
+
+### Slack
+- `POST /api/slack/weekly-post`
+- `POST /api/slack/reaction`
 
 ---
 
-## 🚀 セットアップ & デプロイ
+## 🧑‍💻 使い方（ユーザー）
+1. 従業員IDとニックネームを入力
+2. アバターを選択してログイン
+3. ダッシュボードからクイズ挑戦
+4. 週次ランキングでスコア競争
 
-### ローカル開発環境
+---
+
+## ⚙️ 開発手順
 
 ```bash
-# 1. プロジェクトディレクトリに移動
-cd /home/user/webapp
+# 1. マイグレーション
+cd /home/user/webapp && npm run db:migrate:local
 
-# 2. 依存関係インストール(既にインストール済み)
-npm install
+# 2. ビルド
+cd /home/user/webapp && npm run build
 
-# 3. D1ローカルデータベースのマイグレーション
-npm run db:migrate:local
-
-# 4. ビルド
-npm run build
-
-# 5. 開発サーバー起動(PM2)
-pm2 start ecosystem.config.cjs
-
-# 6. サービス確認
-curl http://localhost:3000
-
-# 7. PM2ログ確認
-pm2 logs --nostream
+# 3. 起動
+cd /home/user/webapp && pm2 start ecosystem.config.cjs
 ```
 
-### Cloudflare Pages本番デプロイ
-
-```bash
-# 1. Cloudflare認証設定(初回のみ)
-# setup_cloudflare_api_key ツールを実行
-
-# 2. D1本番データベース作成(初回のみ)
-npx wrangler d1 create webapp-production
-# 出力されたdatabase_idをwrangler.jsoncに設定
-
-# 3. マイグレーション適用
-npm run db:migrate:prod
-
-# 4. ビルド & デプロイ
-npm run deploy:prod
+### Slack通知を有効化する場合
+`.dev.vars` または Cloudflare Secrets に以下を設定:
+```
+SLACK_WEBHOOK_URL=https://hooks.slack.com/services/...
 ```
 
 ---
 
-## 📚 ストーリー構成
-
-### チャプター一覧
-
-| ID | タイトル | 分野 | 説明 |
-|----|---------|------|------|
-| prologue | プロローグ | 導入 | 守護者としての覚醒 |
-| chapter1 | 欺瞞の砂漠 | 法務分野 | 景品表示法・下請法違反 |
-| chapter2 | 強欲の地下迷宮 | 経理分野 | 公私混同・公金不正使用 |
-| chapter3 | 沈黙の毒霧の森 | 人事分野 | パワーハラスメント |
-| chapter4 | 影の包囲網 | 情シス分野 | 情報漏洩・セキュリティ |
-| chapter5 | 歪んだ時計塔 | 労務分野 | 過重労働・労働基準法違反 |
-| final | 成果至上主義の魔王 | 最終決戦 | 魔王プロフィット討伐 |
-| bonus | 古の審判所 | 究極の試練 | 全分野複合問題 |
+## 🚀 次の推奨開発
+- 部門別レビュー/承認ワークフロー
+- 画像素材のゲーム内UI最適化
+- D1本番運用とCloudflare Pages公開
 
 ---
 
-## 🎨 UI設計
-
-### カラーパレット
-- **プロローグ**: ピンク〜レッドグラデーション
-- **第1章(法務)**: ベージュ〜オレンジグラデーション
-- **第2章(経理)**: ピンク〜パープルグラデーション
-- **第3章(人事)**: ブルー〜ライトブルーグラデーション
-- **第4章(情シス)**: オレンジ〜パープルグラデーション
-- **第5章(労務)**: パープル〜ブルーグラデーション
-- **終章(魔王)**: ピンク〜イエローグラデーション
-- **ボーナス**: シアン〜ダークパープルグラデーション
-
-### アニメーション
-- **フェードイン**: 0.8秒のイージングアニメーション
-- **ホバーエフェクト**: カード上昇 + シャドウ拡大
-- **進行度インジケーター**: ドットの色変化
-
----
-
-## 🧪 テスト方法
-
-### API テスト
-
-```bash
-# チャプター一覧取得
-curl http://localhost:3000/api/chapters
-
-# プレイヤー作成
-curl -X POST http://localhost:3000/api/progress \
-  -H "Content-Type: application/json" \
-  -d '{"nickname":"テストユーザー"}'
-
-# 進行状況取得
-curl http://localhost:3000/api/progress/{player_id}
-
-# チャプタークリア
-curl -X POST http://localhost:3000/api/progress/{player_id}/clear/prologue
-```
-
----
-
-## 📁 プロジェクト構造
-
-```
-webapp/
-├── src/
-│   ├── index.tsx           # メインアプリケーション(Hono)
-│   ├── story-data.ts       # ストーリーデータ定義
-│   ├── types.ts            # TypeScript型定義
-│   └── renderer.tsx        # JSXレンダラー(デフォルト)
-├── public/
-│   └── static/
-│       └── app.js          # フロントエンドJavaScript
-├── migrations/
-│   └── 0001_initial_schema.sql  # D1データベーススキーマ
-├── dist/                   # ビルド出力(自動生成)
-├── .wrangler/              # Wranglerキャッシュ(ローカル開発)
-├── ecosystem.config.cjs    # PM2設定
-├── wrangler.jsonc          # Cloudflare設定
-├── package.json            # 依存関係・スクリプト
-├── vite.config.ts          # Viteビルド設定
-├── tsconfig.json           # TypeScript設定
-├── .gitignore              # Git除外設定
-└── README.md               # このファイル
-```
-
----
-
-## 🔧 開発コマンド
-
-```bash
-# ビルド
-npm run build
-
-# ローカル開発サーバー(PM2)
-pm2 start ecosystem.config.cjs
-pm2 logs --nostream
-pm2 restart compliance-quest
-pm2 delete compliance-quest
-
-# D1データベース操作
-npm run db:migrate:local      # ローカルマイグレーション
-npm run db:migrate:prod       # 本番マイグレーション
-
-# ポートクリーンアップ
-npm run clean-port
-
-# テスト
-npm run test
-
-# デプロイ
-npm run deploy:prod
-```
-
----
-
-## 🎓 学習目標
-
-このゲームを通じて、以下のコンプライアンス知識を習得できます:
-
-1. **法務分野**: 景品表示法、下請法、正しい契約の重要性
-2. **経理分野**: 公私混同の防止、適正な会計処理
-3. **人事分野**: パワーハラスメント防止、相互尊重の文化
-4. **情報システム分野**: 情報セキュリティ、情報漏洩リスク管理
-5. **労務分野**: 労働基準法、健全な労働環境の維持
-
----
-
-## 📝 今後の開発推奨事項
-
-1. **問題システムの実装**
-   - 各チャプターに3〜5問のクイズを追加
-   - 正解率に応じたスコアリング
-
-2. **ランキング機能**
-   - クリアタイム記録
-   - スコアランキング表示
-
-3. **ソーシャル機能**
-   - 成績のSNSシェア
-   - チーム対抗戦モード
-
-4. **管理画面**
-   - プレイヤー統計表示
-   - チャプター別クリア率分析
-
-5. **多言語対応**
-   - 英語版の追加
-   - i18n対応
-
----
-
-## 📄 ライセンス
-
-このプロジェクトは教育目的で作成されています。
-
----
-
-## 👤 開発者
-
-- **プロジェクト作成日**: 2026-02-05
-- **技術スタック**: Hono + Cloudflare Pages + D1
-- **最終更新日**: 2026-02-05
-
----
-
-## 🙏 謝辞
-
-このプロジェクトは、企業のコンプライアンス研修をゲーミフィケーションすることで、より効果的な学習体験を提供することを目指しています。
-
-**さあ、守護者よ、エシカル王国を救う旅に出よう!** 🛡️✨
+## 📝 最終更新日
+2026-02-06
