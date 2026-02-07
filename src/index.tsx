@@ -148,15 +148,15 @@ app.get('/', (c) => {
             src="/static/assets/visuals/key-visual.png"
             alt="Compliance Quest"
           />
-          <button onclick="showMenu()">ゲームスタート</button>
+          <button id="start-button">ゲームスタート</button>
         </div>
 
         <div id="menu-screen" class="window" style="display: none;">
           <h1>コンプライアンス クエスト</h1>
-          <button onclick="showLogin()">ログイン</button>
-          <button onclick="showRegister()">しんきとうろく</button>
-          <button class="secondary" onclick="showAdmin()">かんりがめん</button>
-          <button class="secondary" onclick="showLanding()">もどる</button>
+          <button id="menu-login">ログイン</button>
+          <button id="menu-register">しんきとうろく</button>
+          <button class="secondary" id="menu-admin">かんりがめん</button>
+          <button class="secondary" id="menu-back">もどる</button>
         </div>
 
         <div id="login-screen" class="window" style="display: none;">
@@ -164,8 +164,8 @@ app.get('/', (c) => {
           <p>じゅうぎょういんIDを いれよ</p>
           <input type="text" id="employeeId" placeholder="TEST001" />
           <br />
-          <button onclick="login()">ぼうけんを はじめる</button>
-          <button class="secondary" onclick="showMenu()">もどる</button>
+          <button id="login-submit">ぼうけんを はじめる</button>
+          <button class="secondary" id="login-back">もどる</button>
           <p id="error" style="color: red;"></p>
         </div>
 
@@ -181,15 +181,15 @@ app.get('/', (c) => {
               <img id="avatar-preview" src="" alt="avatar preview" />
             </div>
           </div>
-          <button onclick="registerUser()">とうろくする</button>
-          <button class="secondary" onclick="showMenu()">もどる</button>
+          <button id="register-submit">とうろくする</button>
+          <button class="secondary" id="register-back">もどる</button>
           <p id="register-error" style="color: red;"></p>
         </div>
 
         <div id="admin-screen" class="window" style="display: none;">
           <h1>かんりがめん</h1>
           <p>※かんりがめんは じゅんびちゅうです</p>
-          <button class="secondary" onclick="showMenu()">もどる</button>
+          <button class="secondary" id="admin-back">もどる</button>
         </div>
 
         <div id="main-screen" class="window" style="display: none;">
@@ -331,6 +331,39 @@ app.get('/', (c) => {
           window.login = login;
           window.registerUser = registerUser;
 
+          function bindNavigation() {
+            const startButton = document.getElementById('start-button');
+            if (startButton) startButton.addEventListener('click', showMenu);
+
+            const menuLogin = document.getElementById('menu-login');
+            if (menuLogin) menuLogin.addEventListener('click', showLogin);
+
+            const menuRegister = document.getElementById('menu-register');
+            if (menuRegister) menuRegister.addEventListener('click', showRegister);
+
+            const menuAdmin = document.getElementById('menu-admin');
+            if (menuAdmin) menuAdmin.addEventListener('click', showAdmin);
+
+            const menuBack = document.getElementById('menu-back');
+            if (menuBack) menuBack.addEventListener('click', showLanding);
+
+            const loginSubmit = document.getElementById('login-submit');
+            if (loginSubmit) loginSubmit.addEventListener('click', login);
+
+            const loginBack = document.getElementById('login-back');
+            if (loginBack) loginBack.addEventListener('click', showMenu);
+
+            const registerSubmit = document.getElementById('register-submit');
+            if (registerSubmit) registerSubmit.addEventListener('click', registerUser);
+
+            const registerBack = document.getElementById('register-back');
+            if (registerBack) registerBack.addEventListener('click', showMenu);
+
+            const adminBack = document.getElementById('admin-back');
+            if (adminBack) adminBack.addEventListener('click', showMenu);
+          }
+
+          bindNavigation();
           renderAvatarOptions();
           showLanding();
         `}</script>
