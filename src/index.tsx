@@ -1,4 +1,5 @@
 import { Hono } from 'hono'
+import { raw } from 'hono/html'
 import { jsx } from 'hono/jsx'
 
 type Bindings = {
@@ -199,7 +200,7 @@ app.get('/', (c) => {
           <p>これから ぼうけんが はじまる……</p>
         </div>
 
-        <script>{`
+        <script>{raw(`
           const avatars = ${JSON.stringify(avatars)};
           const screens = [
             'landing-screen',
@@ -363,10 +364,18 @@ app.get('/', (c) => {
             if (adminBack) adminBack.addEventListener('click', showMenu);
           }
 
-          bindNavigation();
-          renderAvatarOptions();
-          showLanding();
-        `}</script>
+          function init() {
+            bindNavigation();
+            renderAvatarOptions();
+            showLanding();
+          }
+
+          if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', init);
+          } else {
+            init();
+          }
+        `)}</script>
       </body>
     </html>
   )
