@@ -256,6 +256,12 @@ app.get('/', (c) => {
             document.getElementById('admin-screen').style.display = 'inline-block';
           }
 
+          window.showLanding = showLanding;
+          window.showMenu = showMenu;
+          window.showLogin = showLogin;
+          window.showRegister = showRegister;
+          window.showAdmin = showAdmin;
+
           function selectAvatar(id) {
             selectedAvatarId = id;
             document.querySelectorAll('.avatar-button').forEach((button) => {
@@ -321,6 +327,9 @@ app.get('/', (c) => {
               document.getElementById('register-error').innerText = data.message;
             }
           }
+
+          window.login = login;
+          window.registerUser = registerUser;
 
           renderAvatarOptions();
           showLanding();
