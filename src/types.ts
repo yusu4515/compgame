@@ -1,18 +1,37 @@
 /**
  * ストーリーチャプター定義
  */
+export type StoryRole = 'narrator' | 'hero' | 'ally' | 'enemy';
+
+export interface StoryLine {
+  role: StoryRole;
+  text: string;
+  speakerName?: string;
+  portrait?: string;
+  partnerRole?: StoryRole;
+}
+
 export interface Chapter {
   id: string;
   title: string;
   subtitle: string;
   category: string;
-  narration: string[];
+  narration: StoryLine[];
   stage: string;
   monster: string;
   scenario: string;
   playerRole: string;
   cleared: boolean;
   order: number;
+  quizTriggers?: number[];
+  ally?: {
+    name: string;
+    image: string;
+  };
+  enemy?: {
+    name: string;
+    image: string;
+  };
 }
 
 export interface UserProfile {

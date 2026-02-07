@@ -216,6 +216,7 @@ function renderLogin() {
             </div>
           </div>
         </div>
+        ${renderAdminFab()}
       </div>
     </div>
   `;
@@ -257,6 +258,7 @@ function renderRegister() {
             <button onclick="renderLogin()" class="mt-3 w-full bg-slate-700 hover:bg-slate-600 text-white py-2 rounded-lg">戻る</button>
           </div>
         </div>
+        ${renderAdminFab()}
       </div>
     </div>
   `;
@@ -357,17 +359,15 @@ function renderDashboard() {
           </div>
         </div>
 
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <button onclick="showRanking()" class="bg-slate-800 text-white py-4 rounded-xl font-bold">
             週次ランキング
-          </button>
-          <button onclick="renderAdmin()" class="bg-slate-700 text-white py-4 rounded-xl font-bold">
-            管理画面
           </button>
           <button onclick="logout()" class="bg-slate-600 text-white py-4 rounded-xl font-bold">
             ログアウト
           </button>
         </div>
+        ${renderAdminFab()}
       </div>
     </div>
   `;
@@ -381,6 +381,8 @@ function getChapterTitle(chapterId) {
 function renderStorySelect() {
   const app = document.getElementById('app');
   const progress = AppState.story;
+  const clearedSet = new Set(progress.clearedChapters);
+  const unlockedOrder = progress.clearedChapters.length;
 
   app.innerHTML = `
     <div class="min-h-screen bg-slate-950 p-8" style="background-image: linear-gradient(rgba(15,23,42,0.92), rgba(15,23,42,0.92)), url('${AssetUrls.worldMap}'); background-size: cover; background-position: center;">
@@ -393,22 +395,36 @@ function renderStorySelect() {
           ${AppState.chapters
             .filter((chapter) => chapter.id !== 'bonus' || progress.isBonusUnlocked)
             .map((chapter) => {
-              const locked = chapter.id === 'final' && progress.clearedChapters.length < 5;
+              const isCleared = clearedSet.has(chapter.id);
+              const baseLocked = chapter.order > unlockedOrder;
+              const locked = !isCleared && (chapter.id === 'bonus'
+                ? !progress.isBonusUnlocked
+                : chapter.id === 'final'
+                ? progress.clearedChapters.length < 5
+                : baseLocked);
+              const statusBadge = isCleared
+                ? '<span class="dq-status dq-status-clear">CLEAR</span>'
+                : locked
+                ? '<span class="dq-status dq-status-lock">LOCK</span>'
+                : '';
               return `
               <div class="bg-slate-900/70 p-4 rounded-xl ${locked ? 'opacity-50' : 'cursor-pointer'}" ${
                 locked ? '' : `onclick="openStory('${chapter.id}')"`
               }>
-                <h3 class="font-semibold">${softenText(`${chapter.title} ${chapter.subtitle}`)}</h3>
+                <div class="flex items-center justify-between mb-2">
+                  <h3 class="font-semibold">${softenText(`${chapter.title} ${chapter.subtitle}`)}</h3>
+                  ${statusBadge}
+                </div>
                 <p class="text-xs text-slate-400">${softenText(chapter.category)}</p>
               </div>`;
             })
             .join('')}
         </div>
+        ${renderAdminFab()}
       </div>
     </div>
   `;
 }
-
 function getStoryDomain(chapterId) {
   const mapping = {
     chapter1: 'legal',
@@ -432,6 +448,10 @@ function getStorySpeaker(index, chapter) {
 }
 
 function buildQuizTriggers(chapter) {
+  if (chapter.quizTriggers && chapter.quizTriggers.length) {
+    return chapter.quizTriggers;
+  }
+
   const totalTriggers = chapter.id === 'bonus' || chapter.id === 'final' ? 3 : 2;
   const triggers = [];
   for (let i = 1; i <= totalTriggers; i += 1) {
@@ -450,6 +470,7 @@ function openStory(chapterId) {
     index: 0,
     quizTriggers: buildQuizTriggers(chapter),
     quizPointer: 0,
+    pendingQuiz: false,
     waitingQuiz: false,
     quizResult: null,
     battle: {
@@ -457,8 +478,8 @@ function openStory(chapterId) {
       enemyHp: 6,
       maxPlayerHp: 6,
       maxEnemyHp: 6,
-      timeLimit: 12,
-      timeLeft: 12,
+      timeLimit: 60,
+      timeLeft: 60,
       timerId: null,
       lastEffect: '',
     },
@@ -469,20 +490,47 @@ function openStory(chapterId) {
 async function handleStoryAdvance() {
   const story = AppState.currentStory;
   if (!story) return;
-  if (story.waitingQuiz || story.quizResult) return;
+  if (story.pendingQuiz || story.waitingQuiz || story.quizResult) return;
 
   const nextIndex = Math.min(story.index + 1, story.chapter.narration.length - 1);
   story.index = nextIndex;
 
   const trigger = story.quizTriggers[story.quizPointer];
   if (trigger !== undefined && nextIndex >= trigger) {
-    story.waitingQuiz = true;
+    story.pendingQuiz = true;
     story.quizPointer += 1;
-    await fetchNextQuestion(getStoryDomain(story.chapter.id));
-    startStoryTimer();
   }
 
   renderStoryScene();
+}
+
+async function startStoryQuiz() {
+  const story = AppState.currentStory;
+  if (!story) return;
+  story.pendingQuiz = false;
+  story.waitingQuiz = true;
+  await fetchNextQuestion(getStoryDomain(story.chapter.id));
+  startStoryTimer();
+  renderStoryScene();
+}
+
+function renderStoryIntroPanel() {
+  const story = AppState.currentStory;
+  if (!story) return '';
+  const chapter = story.chapter;
+  const enemy = getChapterEnemy(chapter);
+  return `
+    <div class="dq-quiz" onclick="event.stopPropagation()">
+      <div class="flex items-center gap-4">
+        <img src="${enemy.image}" alt="${enemy.name}" class="dq-portrait w-28 h-28 object-cover" />
+        <div>
+          <p class="text-sm text-slate-300">${enemy.name}</p>
+          <p class="text-xs text-slate-400">まものが あらわれた! たたかいの じゅんびを しよう。</p>
+        </div>
+      </div>
+      <button onclick="startStoryQuiz()" class="dq-button mt-4">たたかいを はじめる</button>
+    </div>
+  `;
 }
 
 function startStoryTimer() {
@@ -513,6 +561,7 @@ function stopStoryTimer() {
 async function handleStoryTimeout() {
   const story = AppState.currentStory;
   if (!story?.battle) return;
+  story.pendingQuiz = false;
   story.waitingQuiz = false;
   story.quizResult = true;
   story.battle.playerHp = Math.max(0, story.battle.playerHp - 2);
@@ -529,15 +578,81 @@ async function handleStoryTimeout() {
   renderStoryScene();
 }
 
+function getHeroName() {
+  return AppState.profile?.nickname || '守護者';
+}
+
+function getChapterAlly(chapter) {
+  return {
+    name: chapter.ally?.name || '仲間',
+    image: chapter.ally?.image || AssetUrls.avatarLineup,
+  };
+}
+
+function getChapterEnemy(chapter) {
+  return {
+    name: chapter.enemy?.name || chapter.monster || 'まもの',
+    image: chapter.enemy?.image || AssetUrls.monsters,
+  };
+}
+
+function resolveStoryLine(line, chapter, heroName, heroPortrait) {
+  const ally = getChapterAlly(chapter);
+  const enemy = getChapterEnemy(chapter);
+  const role = line?.role || 'narrator';
+  const text = softenText((line?.text || '').replace(/\{hero\}/g, heroName));
+  let speakerName = line?.speakerName;
+  let portrait = line?.portrait;
+  if (role === 'hero') {
+    speakerName = heroName;
+    portrait = heroPortrait;
+  } else if (role === 'ally') {
+    speakerName = speakerName || ally.name;
+    portrait = portrait || ally.image;
+  } else if (role === 'enemy') {
+    speakerName = speakerName || enemy.name;
+    portrait = portrait || enemy.image;
+  } else {
+    speakerName = speakerName || '語り部';
+    portrait = portrait || AssetUrls.avatarLineup;
+  }
+  const partnerRole = line?.partnerRole || (role === 'hero' ? 'ally' : 'hero');
+  return { text, speakerName, portrait, role, partnerRole };
+}
+
+function resolveRoleMeta(role, chapter, heroName, heroPortrait) {
+  const ally = getChapterAlly(chapter);
+  const enemy = getChapterEnemy(chapter);
+  if (role === 'hero') {
+    return { name: heroName, image: heroPortrait, role };
+  }
+  if (role === 'enemy') {
+    return { name: enemy.name, image: enemy.image, role };
+  }
+  return { name: ally.name, image: ally.image, role: 'ally' };
+}
+
 function renderStoryScene() {
   const app = document.getElementById('app');
   const story = AppState.currentStory;
   const chapter = story.chapter;
-  const line = softenText(chapter.narration[story.index]);
-  const isLast = story.index >= chapter.narration.length - 1;
-  const speaker = softenText(getStorySpeaker(story.index, chapter));
-  const nextHint = story.waitingQuiz || story.quizResult ? 'クイズに こたえよう' : 'クリックで つぎへ';
   const avatar = AppState.avatars.find((item) => item.id === AppState.profile?.avatarId);
+  const heroName = getHeroName();
+  const heroPortrait = avatar?.image || AssetUrls.avatarLineup;
+  const ally = getChapterAlly(chapter);
+  const enemy = getChapterEnemy(chapter);
+  const lineMeta = resolveStoryLine(chapter.narration[story.index], chapter, heroName, heroPortrait);
+  const line = lineMeta.text;
+  const isLast = story.index >= chapter.narration.length - 1;
+  const speaker = softenText(lineMeta.speakerName);
+  const nextHint = story.pendingQuiz
+    ? 'たたかい じゅんび'
+    : story.waitingQuiz || story.quizResult
+    ? 'クイズに こたえよう'
+    : 'クリックで つぎへ';
+  const leftMeta = resolveRoleMeta('hero', chapter, heroName, heroPortrait);
+  const rightMeta = resolveRoleMeta(lineMeta.partnerRole === 'enemy' ? 'enemy' : 'ally', chapter, heroName, heroPortrait);
+  const activeRole = lineMeta.role;
 
   app.innerHTML = `
     <div class="min-h-screen bg-slate-950 p-8" style="background-image: linear-gradient(rgba(15,23,42,0.6), rgba(12,18,34,0.85)), url('${AssetUrls.keyVisual}'); background-size: cover; background-position: center;">
@@ -549,10 +664,21 @@ function renderStoryScene() {
               <p class="text-sm text-slate-300">${softenText(chapter.category)}</p>
             </div>
             <div class="dq-dialog" onclick="handleStoryAdvance()">
+              <div class="dq-dialog-portraits">
+                <div class="dq-dialog-portrait ${activeRole === leftMeta.role ? 'active' : ''}">
+                  <img src="${leftMeta.image}" alt="${leftMeta.name}" />
+                  <span>${softenText(leftMeta.name)}</span>
+                </div>
+                <div class="dq-dialog-portrait ${activeRole === rightMeta.role ? 'active' : ''}">
+                  <img src="${rightMeta.image}" alt="${rightMeta.name}" />
+                  <span>${softenText(rightMeta.name)}</span>
+                </div>
+              </div>
               <p class="dq-speaker">${speaker}</p>
               <p class="text-lg text-slate-100 mt-2">${line || ''}</p>
               <p class="dq-next mt-2">${nextHint}</p>
             </div>
+            ${story.pendingQuiz ? renderStoryIntroPanel() : ''}
             ${story.waitingQuiz ? renderStoryQuizPanel() : ''}
             ${story.quizResult ? renderStoryResultPanel() : ''}
             <div class="flex gap-3 mt-2">
@@ -565,35 +691,44 @@ function renderStoryScene() {
               <h3 class="font-semibold mb-4">登場人物</h3>
               <div class="grid grid-cols-2 gap-3 text-center text-xs text-slate-200">
                 <div>
-                  <img src="${avatar?.image || AssetUrls.avatarLineup}" alt="guardian" class="dq-portrait w-full h-28 object-cover" />
-                  <p class="mt-2">しゅごしゃ</p>
+                  <img src="${heroPortrait}" alt="guardian" class="dq-portrait w-full h-28 object-cover" />
+                  <p class="mt-2">${softenText(heroName)}</p>
                 </div>
                 <div>
-                  <img src="${AssetUrls.monsters}" alt="enemy" class="dq-portrait w-full h-28 object-cover object-left" />
-                  <p class="mt-2">てき せいりょく</p>
+                  <img src="${enemy.image}" alt="enemy" class="dq-portrait w-full h-28 object-cover object-left" />
+                  <p class="mt-2">${softenText(enemy.name)}</p>
                 </div>
               </div>
             </div>
             <div class="glass rounded-3xl p-6">
               <h3 class="font-semibold mb-4">敵勢力レポート</h3>
-              <img src="${AssetUrls.monsters}" alt="monsters" class="rounded-2xl shadow-xl" />
+              <img src="${enemy.image}" alt="monsters" class="rounded-2xl shadow-xl" />
             </div>
           </div>
         </div>
+        ${renderAdminFab()}
       </div>
     </div>
   `;
 }
-
 function renderStoryQuizPanel() {
   const question = AppState.currentQuestion;
   const battle = AppState.currentStory?.battle;
+  const chapter = AppState.currentStory?.chapter;
+  const enemy = chapter ? getChapterEnemy(chapter) : { name: 'まもの', image: AssetUrls.monsters };
   const timeRatio = battle ? Math.round((battle.timeLeft / battle.timeLimit) * 100) : 0;
   return `
     <div class="dq-quiz" onclick="event.stopPropagation()">
       <div class="flex items-center justify-between mb-3">
         <span class="text-sm text-purple-200">${DomainLabels[question.domain]}</span>
         <span class="text-sm text-yellow-300">たたかい じかん: ${battle?.timeLeft ?? 0}びょう</span>
+      </div>
+      <div class="flex items-center gap-4 mb-4">
+        <img src="${enemy.image}" alt="${enemy.name}" class="dq-portrait w-24 h-24 object-cover" />
+        <div>
+          <p class="text-sm text-slate-200">${softenText(enemy.name)}</p>
+          <p class="text-xs text-slate-400">Lv.${question.difficulty} まもの</p>
+        </div>
       </div>
       <div class="dq-hp mb-4">
         <div>
@@ -623,7 +758,6 @@ function renderStoryQuizPanel() {
     </div>
   `;
 }
-
 function renderStoryResultPanel() {
   const result = AppState.lastResult;
   const question = AppState.currentQuestion;
@@ -651,22 +785,28 @@ async function answerStoryQuestion(choiceIndex) {
   await submitAnswer(choiceIndex);
   const story = AppState.currentStory;
   const battle = story?.battle;
+  story.pendingQuiz = false;
   story.waitingQuiz = false;
   story.quizResult = true;
 
   if (battle) {
     const timeMs = Math.round(performance.now() - AppState.quizStartTime);
-    const isFast = timeMs <= 4000;
+    const isFast = timeMs <= 30000;
+    const difficulty = AppState.currentQuestion?.difficulty || 1;
+    const clearedCount = AppState.story?.clearedChapters?.length || 0;
+    const storyBoost = Math.min(1, Math.floor(clearedCount / 2));
     if (AppState.lastResult?.isCorrect) {
-      const damage = isFast ? 3 : 2;
+      const baseDamage = 2 + Math.floor((difficulty - 1) / 2);
+      const damage = Math.min(4, baseDamage + (isFast ? 1 : 0) + storyBoost);
       battle.enemyHp = Math.max(0, battle.enemyHp - damage);
-      battle.lastEffect = isFast ? 'かいしんの いちげき!' : 'こうげきが きまった!';
+      battle.lastEffect = isFast ? 'はやわざが きまった!' : 'こうげきが きまった!';
       if (battle.enemyHp <= 0) {
         battle.lastEffect += ' まものを たおした!';
       }
     } else {
-      battle.playerHp = Math.max(0, battle.playerHp - 2);
-      battle.lastEffect = 'まものの こうげき!';
+      const penalty = 2 + Math.floor((difficulty - 1) / 4);
+      battle.playerHp = Math.max(0, battle.playerHp - penalty);
+      battle.lastEffect = penalty > 2 ? 'つよい こうげき!' : 'まものの こうげき!';
     }
   }
 
@@ -682,6 +822,11 @@ function closeStoryResult() {
     battle.playerHp = battle.maxPlayerHp;
     battle.enemyHp = battle.maxEnemyHp;
     battle.lastEffect = 'たちなおした!';
+    story.index = 0;
+    story.quizPointer = 0;
+    story.pendingQuiz = false;
+    story.waitingQuiz = false;
+    showToast('ダンジョンの ふりだしに もどった', 'error');
   }
 
   renderStoryScene();
@@ -736,8 +881,17 @@ async function showRanking() {
             )
             .join('')}
         </div>
+        ${renderAdminFab()}
       </div>
     </div>
+  `;
+}
+
+function renderAdminFab() {
+  return `
+    <button onclick="renderAdmin()" class="dq-admin-fab" title="管理画面">
+      <i class="fa-solid fa-gear"></i>
+    </button>
   `;
 }
 
@@ -797,6 +951,7 @@ async function renderAdmin() {
             AppState.adminPage + 1 >= totalPages ? 'disabled' : ''
           }>次へ</button>
         </div>
+        ${renderAdminFab()}
       </div>
     </div>
   `;

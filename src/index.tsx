@@ -715,10 +715,21 @@ app.post('/api/questions/answer', async (c) => {
   const isCorrect = questionRow.correct_index === choiceIndex;
   const difficulty = questionRow.difficulty as number;
   const basePoint = 100;
+
+  const progressRow = await DB.prepare('SELECT cleared_chapters FROM story_progress WHERE employee_id = ?')
+    .bind(employeeId)
+    .first();
+  const clearedCount = progressRow?.cleared_chapters
+    ? (JSON.parse(progressRow.cleared_chapters as string) as string[]).length
+    : 0;
+  const storyBonus = Math.min(0.15, clearedCount * 0.02);
+  const difficultyBonus = Math.min(0.12, (difficulty - 1) * 0.03);
+  const fastBonus = Math.min(0.25, storyBonus + difficultyBonus);
+
   let timeBonus = 0.6;
-  if (timeMs <= 15000) timeBonus = 1.2;
-  else if (timeMs <= 30000) timeBonus = 1.0;
-  else if (timeMs <= 60000) timeBonus = 0.8;
+  if (timeMs <= 15000) timeBonus = 1.1 + fastBonus;
+  else if (timeMs <= 30000) timeBonus = 1.0 + fastBonus;
+  else if (timeMs <= 60000) timeBonus = 0.85;
 
   const score = isCorrect ? Math.round(basePoint * difficulty * timeBonus) : Math.round(basePoint * 0.1);
   const xpGained = isCorrect ? 20 * difficulty : 5;

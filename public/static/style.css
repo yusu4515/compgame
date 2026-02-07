@@ -178,3 +178,76 @@ img {
 .fade-in {
   animation: fadeIn 0.8s ease-out;
 }
+
+
+.dq-dialog-portraits {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.dq-dialog-portrait {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.7rem;
+  color: #cbd5f5;
+  opacity: 0.6;
+}
+
+.dq-dialog-portrait img {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  border: 2px solid rgba(247, 215, 116, 0.4);
+  object-fit: cover;
+}
+
+.dq-dialog-portrait.active {
+  color: var(--dq-gold);
+  opacity: 1;
+}
+
+.dq-status {
+  font-size: 0.65rem;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(247, 215, 116, 0.3);
+  letter-spacing: 0.08em;
+}
+
+.dq-status-clear {
+  background: rgba(34, 197, 94, 0.18);
+  color: #bbf7d0;
+  border-color: rgba(34, 197, 94, 0.6);
+}
+
+.dq-status-lock {
+  background: rgba(148, 163, 184, 0.2);
+  color: #e2e8f0;
+  border-color: rgba(148, 163, 184, 0.5);
+}
+
+.dq-admin-fab {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  width: 44px;
+  height: 44px;
+  border-radius: 999px;
+  background: rgba(30, 41, 59, 0.9);
+  border: 1px solid var(--dq-gold);
+  color: var(--dq-gold);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.35);
+  transition: transform 0.15s ease, filter 0.15s ease;
+  z-index: 40;
+}
+
+.dq-admin-fab:hover {
+  transform: translateY(-2px);
+  filter: brightness(1.1);
+}
