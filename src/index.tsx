@@ -8,6 +8,10 @@ import { generateQuestions } from './questions-data';
 const app = new Hono<{ Bindings: Bindings }>();
 
 app.use('/api/*', cors());
+app.use('/api/*', async (c, next) => {
+  await ensureCoreSchema(c.env.DB);
+  await next();
+});
 app.use('/static/*', serveStatic({ root: './public' }));
 
 const TITLE_SEEDS = [
@@ -67,6 +71,8 @@ const AVATAR_LIST = [
   },
 ];
 
+const DEFAULT_AVATAR_ID = AVATAR_LIST[0]?.id ?? 'avatar-heroine-knight';
+const ADMIN_PASSWORD = 'acrovekanri';
 const WEEKLY_RESET_DAY = 1; // Monday
 
 function getDateString(date: Date): string {
@@ -89,6 +95,122 @@ function calculateLevel(xp: number): number {
     threshold += level * 120;
   }
   return level;
+}
+
+async function createUsersTable(DB: D1Database) {
+  await DB.prepare(
+    `CREATE TABLE IF NOT EXISTS users (
+      employee_id TEXT PRIMARY KEY,
+      nickname TEXT NOT NULL,
+      avatar_id TEXT NOT NULL,
+      level INTEGER NOT NULL DEFAULT 1,
+      xp INTEGER NOT NULL DEFAULT 0,
+      coins INTEGER NOT NULL DEFAULT 0,
+      current_area TEXT NOT NULL DEFAULT 'prologue',
+      title_primary TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`
+  ).run();
+}
+
+async function createTownTable(DB: D1Database) {
+  await DB.prepare(
+    `CREATE TABLE IF NOT EXISTS town_prosperity (
+      employee_id TEXT PRIMARY KEY,
+      town_level INTEGER NOT NULL DEFAULT 0,
+      fog_cleared INTEGER NOT NULL DEFAULT 0,
+      inn_rebuilt INTEGER NOT NULL DEFAULT 0,
+      bank_rebuilt INTEGER NOT NULL DEFAULT 0,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (employee_id) REFERENCES users(employee_id)
+    )`
+  ).run();
+}
+
+async function ensureCoreSchema(DB: D1Database) {
+  const usersInfo = await DB.prepare("PRAGMA table_info('users')").all();
+  const userColumns = (usersInfo.results ?? []).map((row) => row.name as string);
+
+  if (userColumns.length === 0) {
+    await createUsersTable(DB);
+  } else if (!userColumns.includes('employee_id')) {
+    await DB.prepare('ALTER TABLE users RENAME TO users_legacy').run();
+    await createUsersTable(DB);
+
+    const selectEmployeeId = userColumns.includes('employeeId') ? 'employeeId' : "''";
+    const selectNickname = userColumns.includes('nickname') ? 'nickname' : "''";
+    const selectLevel = userColumns.includes('level') ? 'level' : '1';
+    const selectXp = userColumns.includes('xp') ? 'xp' : '0';
+    const selectCoins = userColumns.includes('coins') ? 'coins' : '0';
+
+    await DB.prepare(
+      `INSERT INTO users (employee_id, nickname, avatar_id, level, xp, coins, current_area)
+       SELECT ${selectEmployeeId}, ${selectNickname}, '${DEFAULT_AVATAR_ID}', ${selectLevel}, ${selectXp}, ${selectCoins}, 'prologue'
+       FROM users_legacy`
+    ).run();
+    await DB.prepare('DROP TABLE users_legacy').run();
+  }
+
+  const townInfo = await DB.prepare("PRAGMA table_info('town_prosperity')").all();
+  const townColumns = (townInfo.results ?? []).map((row) => row.name as string);
+
+  if (townColumns.length === 0) {
+    await createTownTable(DB);
+  } else if (!townColumns.includes('employee_id')) {
+    await DB.prepare('ALTER TABLE town_prosperity RENAME TO town_prosperity_legacy').run();
+    await createTownTable(DB);
+    await DB.prepare('DROP TABLE town_prosperity_legacy').run();
+  }
+
+  await DB.prepare(
+    `CREATE TABLE IF NOT EXISTS user_stats (
+      employee_id TEXT PRIMARY KEY,
+      legal_kills INTEGER NOT NULL DEFAULT 0,
+      finance_kills INTEGER NOT NULL DEFAULT 0,
+      hr_kills INTEGER NOT NULL DEFAULT 0,
+      labor_kills INTEGER NOT NULL DEFAULT 0,
+      infosec_kills INTEGER NOT NULL DEFAULT 0,
+      mixed_kills INTEGER NOT NULL DEFAULT 0,
+      cleared_quests TEXT NOT NULL DEFAULT '[]',
+      last_login_at DATETIME,
+      streak_days INTEGER NOT NULL DEFAULT 0,
+      weekly_score INTEGER NOT NULL DEFAULT 0,
+      weekly_score_updated DATE,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (employee_id) REFERENCES users(employee_id)
+    )`
+  ).run();
+
+  await DB.prepare(
+    `CREATE TABLE IF NOT EXISTS story_progress (
+      employee_id TEXT PRIMARY KEY,
+      current_chapter TEXT NOT NULL DEFAULT 'prologue',
+      cleared_chapters TEXT NOT NULL DEFAULT '[]',
+      is_final_boss_defeated INTEGER NOT NULL DEFAULT 0,
+      is_bonus_unlocked INTEGER NOT NULL DEFAULT 0,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (employee_id) REFERENCES users(employee_id)
+    )`
+  ).run();
+
+  await DB.prepare(
+    `CREATE TABLE IF NOT EXISTS admin_edit_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      employee_id TEXT NOT NULL,
+      question_id INTEGER NOT NULL,
+      payload TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`
+  ).run();
+
+  await DB.prepare(
+    'CREATE INDEX IF NOT EXISTS idx_admin_edit_logs_employee ON admin_edit_logs(employee_id)'
+  ).run();
+  await DB.prepare(
+    'CREATE INDEX IF NOT EXISTS idx_admin_edit_logs_question ON admin_edit_logs(question_id)'
+  ).run();
 }
 
 async function ensureQuestionsSeeded(DB: D1Database) {
@@ -214,7 +336,7 @@ async function fetchUserProfile(DB: D1Database, employeeId: string) {
   const profile: UserProfile = {
     employeeId: userRow.employee_id as string,
     nickname: userRow.nickname as string,
-    avatarId: userRow.avatar_id as string,
+    avatarId: (userRow.avatar_id as string) || DEFAULT_AVATAR_ID,
     level: userRow.level as number,
     xp: userRow.xp as number,
     coins: userRow.coins as number,
@@ -292,16 +414,25 @@ app.get('/api/chapters', (c) => {
 app.post('/api/auth/register', async (c) => {
   const { DB } = c.env;
   const { employeeId, nickname, avatarId } = await c.req.json();
+  const trimmedEmployeeId = typeof employeeId === 'string' ? employeeId.trim() : '';
+  const trimmedNickname = typeof nickname === 'string' ? nickname.trim() : '';
+  const resolvedAvatarId = avatarId && AVATAR_LIST.some((avatar) => avatar.id === avatarId)
+    ? avatarId
+    : DEFAULT_AVATAR_ID;
 
-  if (!employeeId || !nickname || !avatarId) {
-    return c.json({ error: 'employeeId, nickname, avatarId are required' }, 400);
+  if (!trimmedEmployeeId || !trimmedNickname) {
+    return c.json({ error: 'employeeId and nickname are required' }, 400);
+  }
+
+  if (avatarId && !AVATAR_LIST.some((avatar) => avatar.id === avatarId)) {
+    return c.json({ error: 'Invalid avatarId' }, 400);
   }
 
   await ensureQuestionsSeeded(DB);
   await ensureTitlesSeeded(DB);
 
   const existingUser = await DB.prepare('SELECT 1 FROM users WHERE employee_id = ?')
-    .bind(employeeId)
+    .bind(trimmedEmployeeId)
     .first();
   if (existingUser) {
     return c.json({ error: 'Employee ID already exists' }, 409);
@@ -310,9 +441,9 @@ app.post('/api/auth/register', async (c) => {
   const now = new Date();
   const weekStart = getWeekStart(now);
 
-  await createUser(DB, employeeId, nickname, avatarId, now, weekStart);
+  await createUser(DB, trimmedEmployeeId, trimmedNickname, resolvedAvatarId, now, weekStart);
 
-  const profileData = await fetchUserProfile(DB, employeeId);
+  const profileData = await fetchUserProfile(DB, trimmedEmployeeId);
   if (!profileData) {
     return c.json({ error: 'Failed to register' }, 500);
   }
@@ -328,9 +459,10 @@ app.post('/api/auth/register', async (c) => {
 
 app.post('/api/auth/login', async (c) => {
   const { DB } = c.env;
-  const { employeeId, nickname, avatarId } = await c.req.json();
+  const { employeeId } = await c.req.json();
+  const trimmedEmployeeId = typeof employeeId === 'string' ? employeeId.trim() : '';
 
-  if (!employeeId) {
+  if (!trimmedEmployeeId) {
     return c.json({ error: 'employeeId is required' }, 400);
   }
 
@@ -342,25 +474,24 @@ app.post('/api/auth/login', async (c) => {
   const weekStart = getWeekStart(now);
 
   const existingUser = await DB.prepare('SELECT * FROM users WHERE employee_id = ?')
-    .bind(employeeId)
+    .bind(trimmedEmployeeId)
     .first();
 
   if (!existingUser) {
-    if (!nickname || !avatarId) {
-      return c.json({ error: 'nickname and avatarId are required for new user' }, 400);
-    }
-    await createUser(DB, employeeId, nickname, avatarId, now, weekStart);
-  } else if (nickname && avatarId) {
-    await DB.prepare(
-      `UPDATE users SET nickname = ?, avatar_id = ?, updated_at = CURRENT_TIMESTAMP WHERE employee_id = ?`
-    ).bind(nickname, avatarId, employeeId).run();
+    return c.json({ error: 'ユーザーが見つかりません。新規登録してください。' }, 404);
   }
 
-  await ensureUserStats(DB, employeeId, weekStart);
-  await ensureStoryProgress(DB, employeeId);
-  await ensureTownStatus(DB, employeeId);
+  if (!existingUser.avatar_id) {
+    await DB.prepare(
+      `UPDATE users SET avatar_id = ?, updated_at = CURRENT_TIMESTAMP WHERE employee_id = ?`
+    ).bind(DEFAULT_AVATAR_ID, trimmedEmployeeId).run();
+  }
 
-  const statsRow = await DB.prepare('SELECT * FROM user_stats WHERE employee_id = ?').bind(employeeId).first();
+  await ensureUserStats(DB, trimmedEmployeeId, weekStart);
+  await ensureStoryProgress(DB, trimmedEmployeeId);
+  await ensureTownStatus(DB, trimmedEmployeeId);
+
+  const statsRow = await DB.prepare('SELECT * FROM user_stats WHERE employee_id = ?').bind(trimmedEmployeeId).first();
   let streakDays = (statsRow?.streak_days as number) || 0;
   const lastLoginAt = statsRow?.last_login_at ? getDateString(new Date(statsRow.last_login_at as string)) : null;
 
@@ -379,17 +510,17 @@ app.post('/api/auth/login', async (c) => {
          weekly_score_updated = ?,
          updated_at = CURRENT_TIMESTAMP
      WHERE employee_id = ?`
-  ).bind(now.toISOString(), streakDays, weekStart, weekStart, employeeId).run();
+  ).bind(now.toISOString(), streakDays, weekStart, weekStart, trimmedEmployeeId).run();
 
   if (loginBonus.coins > 0 || loginBonus.xp > 0) {
     await DB.prepare(
       `UPDATE users
        SET coins = coins + ?, xp = xp + ?, updated_at = CURRENT_TIMESTAMP
        WHERE employee_id = ?`
-    ).bind(loginBonus.coins, loginBonus.xp, employeeId).run();
+    ).bind(loginBonus.coins, loginBonus.xp, trimmedEmployeeId).run();
   }
 
-  const profileData = await fetchUserProfile(DB, employeeId);
+  const profileData = await fetchUserProfile(DB, trimmedEmployeeId);
   if (!profileData) {
     return c.json({ error: 'Failed to login' }, 500);
   }
@@ -399,7 +530,7 @@ app.post('/api/auth/login', async (c) => {
       c.env,
       'daily_login',
       `守護者 ${profileData.profile.nickname} がデイリーログインしました。連続${streakDays}日目。`,
-      { employeeId, nickname: profileData.profile.nickname, streakDays }
+      { employeeId: trimmedEmployeeId, nickname: profileData.profile.nickname, streakDays }
     );
   }
 
@@ -709,6 +840,21 @@ app.post('/api/questions/answer', async (c) => {
   });
 });
 
+app.post('/api/admin/login', async (c) => {
+  const { employeeId, password } = await c.req.json();
+  const trimmedEmployeeId = typeof employeeId === 'string' ? employeeId.trim() : '';
+
+  if (!trimmedEmployeeId || !password) {
+    return c.json({ error: 'employeeId and password are required' }, 400);
+  }
+
+  if (password !== ADMIN_PASSWORD) {
+    return c.json({ error: 'Invalid admin password' }, 401);
+  }
+
+  return c.json({ success: true });
+});
+
 app.get('/api/admin/questions', async (c) => {
   const { DB } = c.env;
   const domain = c.req.query('domain');
@@ -748,7 +894,20 @@ app.get('/api/admin/questions', async (c) => {
 app.put('/api/admin/questions/:id', async (c) => {
   const { DB } = c.env;
   const id = Number(c.req.param('id'));
-  const { questionText, choices, correctIndex, explanation, difficulty, domain } = await c.req.json();
+  const {
+    adminEmployeeId,
+    questionText,
+    choices,
+    correctIndex,
+    explanation,
+    difficulty,
+    domain,
+  } = await c.req.json();
+  const trimmedAdminEmployeeId = typeof adminEmployeeId === 'string' ? adminEmployeeId.trim() : '';
+
+  if (!trimmedAdminEmployeeId) {
+    return c.json({ error: 'adminEmployeeId is required' }, 400);
+  }
 
   if (!id || !questionText || !choices || correctIndex === undefined || !explanation) {
     return c.json({ error: 'Invalid payload' }, 400);
@@ -767,6 +926,18 @@ app.put('/api/admin/questions/:id', async (c) => {
     domain ?? 'legal',
     id
   ).run();
+
+  await DB.prepare(
+    `INSERT INTO admin_edit_logs (employee_id, question_id, payload)
+     VALUES (?, ?, ?)`
+  ).bind(trimmedAdminEmployeeId, id, JSON.stringify({
+    questionText,
+    choices,
+    correctIndex,
+    explanation,
+    difficulty: difficulty ?? 1,
+    domain: domain ?? 'legal',
+  })).run();
 
   return c.json({ success: true });
 });

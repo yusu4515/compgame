@@ -17,6 +17,7 @@ const AppState = {
   adminTotal: 0,
   adminPage: 0,
   adminDomain: '',
+  adminEmployeeId: null,
 };
 
 const AssetUrls = {
@@ -104,18 +105,34 @@ async function fetchChapters() {
   AppState.chapters = response.data.chapters;
 }
 
-async function login(employeeId, nickname, avatarId) {
-  const response = await axios.post('/api/auth/login', { employeeId, nickname, avatarId });
-  AppState.profile = response.data.profile;
-  AppState.stats = response.data.stats;
-  AppState.story = response.data.story;
-  AppState.town = response.data.town;
-  localStorage.setItem('employeeId', employeeId);
-  AppState.employeeId = employeeId;
+function applyLoginResponse(data) {
+  AppState.profile = data.profile;
+  AppState.stats = data.stats;
+  AppState.story = data.story;
+  AppState.town = data.town;
 
-  if (response.data.loginBonus?.coins) {
-    showToast(`デイリーボーナス: +${response.data.loginBonus.coins}コイン / +${response.data.loginBonus.xp}XP`, 'success');
+  if (data.profile?.employeeId) {
+    localStorage.setItem('employeeId', data.profile.employeeId);
+    AppState.employeeId = data.profile.employeeId;
   }
+
+  if (data.loginBonus?.coins) {
+    showToast(`デイリーボーナス: +${data.loginBonus.coins}コイン / +${data.loginBonus.xp}XP`, 'success');
+  }
+}
+
+async function login(employeeId) {
+  const response = await axios.post('/api/auth/login', { employeeId });
+  applyLoginResponse(response.data);
+}
+
+async function registerUser(employeeId, nickname, avatarId) {
+  const response = await axios.post('/api/auth/register', { employeeId, nickname, avatarId });
+  applyLoginResponse(response.data);
+}
+
+async function adminLogin(employeeId, password) {
+  await axios.post('/api/admin/login', { employeeId, password });
 }
 
 async function fetchProfile() {
@@ -145,7 +162,13 @@ async function fetchAdminQuestions() {
 }
 
 async function updateQuestion(questionId, payload) {
-  await axios.put(`/api/admin/questions/${questionId}`, payload);
+  if (!AppState.adminEmployeeId) {
+    throw new Error('admin login required');
+  }
+  await axios.put(`/api/admin/questions/${questionId}`, {
+    ...payload,
+    adminEmployeeId: AppState.adminEmployeeId,
+  });
 }
 
 async function fetchNextQuestion(domain) {
@@ -170,6 +193,36 @@ async function submitAnswer(choiceIndex) {
 
 function renderLogin() {
   const app = document.getElementById('app');
+  app.innerHTML = `
+    <div class="min-h-screen bg-hero flex items-center justify-center p-8" style="background-image: linear-gradient(rgba(15,23,42,0.85), rgba(15,23,42,0.85)), url('${AssetUrls.keyVisual}'); background-size: cover; background-position: center;">
+      <div class="max-w-4xl w-full glass rounded-3xl p-10 shadow-2xl fade-in">
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          <div>
+            <h1 class="text-4xl font-bold">Compliance Quest</h1>
+            <p class="text-purple-200 mt-2">エシカル王国の守護者</p>
+            <p class="text-sm text-slate-300 mt-4">長期運用型コンプライアンスRPG</p>
+            <img src="${AssetUrls.avatarLineup}" alt="avatar lineup" class="mt-6 rounded-xl shadow-xl" />
+          </div>
+          <div>
+            <p class="text-sm text-slate-300">従業員IDでログインしてください</p>
+            <label class="block text-sm text-slate-200 mt-4 mb-2">従業員ID</label>
+            <input id="employeeId" type="text" class="w-full px-4 py-3 rounded-lg text-slate-900" placeholder="例: EMP-1024" />
+            <button onclick="handleLogin()" class="mt-6 w-full bg-purple-500 hover:bg-purple-600 text-white py-3 rounded-lg font-semibold">
+              ログイン
+            </button>
+            <div class="mt-4 flex flex-col sm:flex-row gap-2">
+              <button onclick="renderRegister()" class="flex-1 bg-slate-700 hover:bg-slate-600 text-white py-2 rounded-lg">新規登録</button>
+              <button onclick="renderAdminLogin()" class="flex-1 bg-slate-800 hover:bg-slate-700 text-white py-2 rounded-lg">管理者画面</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderRegister() {
+  const app = document.getElementById('app');
   const avatarOptions = AppState.avatars
     .map(
       (avatar, index) => `
@@ -183,28 +236,47 @@ function renderLogin() {
     .join('');
 
   app.innerHTML = `
-    <div class="min-h-screen bg-hero flex items-center justify-center p-8" style="background-image: linear-gradient(rgba(15,23,42,0.85), rgba(15,23,42,0.85)), url('${AssetUrls.keyVisual}'); background-size: cover; background-position: center;">
-      <div class="max-w-5xl w-full glass rounded-3xl p-10 shadow-2xl fade-in">
+    <div class="min-h-screen bg-hero flex items-center justify-center p-8" style="background-image: linear-gradient(rgba(15,23,42,0.9), rgba(12,18,34,0.92)), url('${AssetUrls.keyVisual}'); background-size: cover; background-position: center;">
+      <div class="max-w-4xl w-full glass rounded-3xl p-10 shadow-2xl fade-in">
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
           <div>
-            <h1 class="text-4xl font-bold">Compliance Quest</h1>
-            <p class="text-purple-200 mt-2">エシカル王国の守護者</p>
-            <p class="text-sm text-slate-300 mt-4">長期運用型コンプライアンスRPG</p>
-            <img src="${AssetUrls.avatarLineup}" alt="avatar lineup" class="mt-6 rounded-xl shadow-xl" />
+            <h2 class="text-3xl font-bold">新規登録</h2>
+            <p class="text-sm text-slate-300 mt-2">従業員IDとニックネームで守護者登録</p>
+            <img src="${AssetUrls.keyVisual}" alt="key visual" class="mt-6 rounded-xl shadow-xl" />
           </div>
           <div>
-            <p class="text-sm text-slate-300">SSO想定の従業員IDでログインしてください</p>
-            <label class="block text-sm text-slate-200 mt-4 mb-2">従業員ID</label>
-            <input id="employeeId" type="text" class="w-full px-4 py-3 rounded-lg text-slate-900" placeholder="例: EMP-1024" />
+            <label class="block text-sm text-slate-200 mt-2 mb-2">従業員ID</label>
+            <input id="registerEmployeeId" type="text" class="w-full px-4 py-3 rounded-lg text-slate-900" placeholder="例: EMP-1024" />
             <label class="block text-sm text-slate-200 mt-4 mb-2">ニックネーム</label>
-            <input id="nickname" type="text" class="w-full px-4 py-3 rounded-lg text-slate-900" placeholder="守護者名" />
-            <p class="text-sm text-slate-200 mt-4">アバターを選択</p>
+            <input id="registerNickname" type="text" class="w-full px-4 py-3 rounded-lg text-slate-900" placeholder="守護者名" />
+            <p class="text-sm text-slate-200 mt-4">アバター (任意)</p>
             <div class="grid grid-cols-3 gap-3 mt-2">${avatarOptions}</div>
-            <button onclick="handleLogin()" class="mt-8 w-full bg-purple-500 hover:bg-purple-600 text-white py-3 rounded-lg font-semibold">
-              守護者として旅立つ
+            <button onclick="handleRegister()" class="mt-6 w-full bg-purple-500 hover:bg-purple-600 text-white py-3 rounded-lg font-semibold">
+              登録する
             </button>
+            <button onclick="renderLogin()" class="mt-3 w-full bg-slate-700 hover:bg-slate-600 text-white py-2 rounded-lg">戻る</button>
           </div>
         </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderAdminLogin() {
+  const app = document.getElementById('app');
+  app.innerHTML = `
+    <div class="min-h-screen bg-hero flex items-center justify-center p-8" style="background-image: linear-gradient(rgba(15,23,42,0.9), rgba(12,18,34,0.92)), url('${AssetUrls.keyVisual}'); background-size: cover; background-position: center;">
+      <div class="max-w-3xl w-full glass rounded-3xl p-10 shadow-2xl fade-in">
+        <h2 class="text-3xl font-bold">管理者ログイン</h2>
+        <p class="text-sm text-slate-300 mt-2">従業員IDと管理者パスワードを入力</p>
+        <label class="block text-sm text-slate-200 mt-6 mb-2">従業員ID</label>
+        <input id="adminEmployeeId" type="text" class="w-full px-4 py-3 rounded-lg text-slate-900" placeholder="例: EMP-0001" />
+        <label class="block text-sm text-slate-200 mt-4 mb-2">管理者パスワード</label>
+        <input id="adminPassword" type="password" class="w-full px-4 py-3 rounded-lg text-slate-900" placeholder="acrovekanri" />
+        <button onclick="handleAdminLogin()" class="mt-6 w-full bg-purple-500 hover:bg-purple-600 text-white py-3 rounded-lg font-semibold">
+          管理画面へ
+        </button>
+        <button onclick="renderLogin()" class="mt-3 w-full bg-slate-700 hover:bg-slate-600 text-white py-2 rounded-lg">戻る</button>
       </div>
     </div>
   `;
@@ -670,6 +742,11 @@ async function showRanking() {
 }
 
 async function renderAdmin() {
+  if (!AppState.adminEmployeeId) {
+    renderAdminLogin();
+    return;
+  }
+
   await fetchAdminQuestions();
   const app = document.getElementById('app');
   const totalPages = Math.ceil(AppState.adminTotal / 10);
@@ -678,7 +755,10 @@ async function renderAdmin() {
     <div class="min-h-screen bg-slate-950 p-8">
       <div class="max-w-5xl mx-auto glass rounded-3xl p-8">
         <div class="flex items-center justify-between mb-6">
-          <h2 class="text-2xl font-bold">問題エディタ</h2>
+          <div>
+            <h2 class="text-2xl font-bold">問題エディタ</h2>
+            <p class="text-xs text-slate-400">管理者: ${AppState.adminEmployeeId}</p>
+          </div>
           <button onclick="renderDashboard()" class="text-sm text-slate-300">戻る</button>
         </div>
         <div class="flex flex-wrap gap-2 mb-4">
@@ -777,18 +857,22 @@ async function saveQuestion(id) {
     return;
   }
 
-  await updateQuestion(id, {
-    questionText,
-    choices,
-    correctIndex,
-    explanation,
-    difficulty: question.difficulty,
-    domain: question.domain,
-  });
+  try {
+    await updateQuestion(id, {
+      questionText,
+      choices,
+      correctIndex,
+      explanation,
+      difficulty: question.difficulty,
+      domain: question.domain,
+    });
 
-  showToast('問題を更新しました', 'success');
-  document.querySelector('.fixed.inset-0').remove();
-  renderAdmin();
+    showToast('問題を更新しました', 'success');
+    document.querySelector('.fixed.inset-0').remove();
+    renderAdmin();
+  } catch (error) {
+    showToast('管理者ログインが必要です', 'error');
+  }
 }
 
 function logout() {
@@ -796,21 +880,64 @@ function logout() {
   AppState.employeeId = null;
   AppState.profile = null;
   AppState.stats = null;
+  AppState.adminEmployeeId = null;
   renderLogin();
 }
 
 async function handleLogin() {
   const employeeId = document.getElementById('employeeId').value.trim();
-  const nickname = document.getElementById('nickname').value.trim();
-  const avatarInput = document.querySelector('input[name="avatar"]:checked');
 
-  if (!employeeId || !nickname || !avatarInput) {
-    showToast('従業員ID・ニックネーム・アバターを入力してください', 'error');
+  if (!employeeId) {
+    showToast('従業員IDを入力してください', 'error');
     return;
   }
 
-  await login(employeeId, nickname, avatarInput.value);
-  renderDashboard();
+  try {
+    await login(employeeId);
+    renderDashboard();
+  } catch (error) {
+    const message = error?.response?.data?.error || 'ログインに失敗しました';
+    showToast(message, 'error');
+  }
+}
+
+async function handleRegister() {
+  const employeeId = document.getElementById('registerEmployeeId').value.trim();
+  const nickname = document.getElementById('registerNickname').value.trim();
+  const avatarInput = document.querySelector('input[name="avatar"]:checked');
+  const avatarId = avatarInput ? avatarInput.value : null;
+
+  if (!employeeId || !nickname) {
+    showToast('従業員IDとニックネームを入力してください', 'error');
+    return;
+  }
+
+  try {
+    await registerUser(employeeId, nickname, avatarId);
+    renderDashboard();
+  } catch (error) {
+    const message = error?.response?.data?.error || '登録に失敗しました';
+    showToast(message, 'error');
+  }
+}
+
+async function handleAdminLogin() {
+  const employeeId = document.getElementById('adminEmployeeId').value.trim();
+  const password = document.getElementById('adminPassword').value.trim();
+
+  if (!employeeId || !password) {
+    showToast('従業員IDとパスワードを入力してください', 'error');
+    return;
+  }
+
+  try {
+    await adminLogin(employeeId, password);
+    AppState.adminEmployeeId = employeeId;
+    renderAdmin();
+  } catch (error) {
+    const message = error?.response?.data?.error || '管理者ログインに失敗しました';
+    showToast(message, 'error');
+  }
 }
 
 async function init() {
