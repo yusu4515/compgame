@@ -1,22 +1,64 @@
 import type { Chapter, StoryLine } from './types';
 
-const NPC_IMAGES = {
-  sage: '/static/assets/avatars/avatar-queen-mage.png',
-  villager: '/static/assets/avatars/avatar-fox-mage.png',
-  knight: '/static/assets/avatars/avatar-male-knight.png',
-  clerk: '/static/assets/avatars/avatar-heroine-knight.png',
-  steward: '/static/assets/avatars/avatar-rabbit-paladin.png',
-  guard: '/static/assets/avatars/avatar-wolf-guardian.png',
-  artisan: '/static/assets/avatars/avatar-knight-cat.png',
+const CHARACTER_IMAGES: Record<string, string> = {
+  大賢者アウレリア: '大賢者アウレリア.png',
+  乾いた村の長老: '乾いた村の長老.png',
+  村の治療師: '村の治療師.png',
+  旅の商人: '旅の商人.png',
+  若き旅人: '若き旅人.png',
+  市場の番人: '市場の番人.png',
+  村の若者: '村の若者.png',
+  砂漠の契約魔導師: '砂漠の契約魔導士.png',
+  密約の仲介人: '密約の仲介人.png',
+  幻影族の首領: '幻影族の首領.png',
+  王国の会計官: '王国の会計官.png',
+  監査役の騎士: '監査役の騎士.png',
+  迷宮の主の手下: '迷宮の主の手下.png',
+  予言者の商人: '預言者の商人.png',
+  黄金の暴君: '黄金の暴君.png',
+  若き騎士団員: '若き騎士団員.png',
+  絶対君主の隊長: '絶対君主の隊長.png',
+  森の妖精: '森の妖精.png',
+  毒霧族の策士: '毒霧族の策士.png',
+  新任の騎士: '新任の騎士.png',
+  通報を担う騎士: '通報を担う騎士.png',
+  霧の支配者: '霧の支配者.png',
+  情報守護官: '情報守護官.png',
+  なりすましの密偵: 'なりすましの密偵.png',
+  酒場の主人: '酒場の主人.png',
+  影の解析者: '影の解析者.png',
+  影の参謀: '影の参謀.png',
+  時計塔の職人: '時計塔の職人.png',
+  現場監督: '現場監督.png',
+  怠惰族の幻聴: '怠惰族の幻聴.png',
+  時を奪う魔: '時を奪う魔.png',
+  魔王コンプラ・ブレイカー: '魔王コンプラ・ブレイカー.png',
+  五つの聖域の仲間: '五つの聖域の仲間.png',
 };
 
 const ENEMY_IMAGE = '/static/assets/visuals/monster-compendium.png';
+
+const getCharacterImage = (name?: string) => {
+  if (!name) return ENEMY_IMAGE;
+  const file = CHARACTER_IMAGES[name];
+  return file ? `/static/assets/characters/${encodeURIComponent(file)}` : ENEMY_IMAGE;
+};
+
+const NPC_IMAGES = {
+  sage: getCharacterImage('大賢者アウレリア'),
+  villager: getCharacterImage('乾いた村の長老'),
+  knight: getCharacterImage('監査役の騎士'),
+  clerk: getCharacterImage('王国の会計官'),
+  steward: getCharacterImage('五つの聖域の仲間'),
+  guard: getCharacterImage('情報守護官'),
+  artisan: getCharacterImage('時計塔の職人'),
+};
 
 const narrator = (text: string): StoryLine => ({
   role: 'narrator',
   text,
   speakerName: '語り部',
-  portrait: NPC_IMAGES.sage,
+  portrait: getCharacterImage('大賢者アウレリア'),
 });
 
 const hero = (text: string, partnerRole: StoryLine['role'] = 'ally'): StoryLine => ({
@@ -29,14 +71,14 @@ const ally = (text: string, speakerName?: string, portrait?: string): StoryLine 
   role: 'ally',
   text,
   speakerName,
-  portrait,
+  portrait: getCharacterImage(speakerName) || portrait,
 });
 
 const enemy = (text: string, speakerName?: string, portrait?: string): StoryLine => ({
   role: 'enemy',
   text,
   speakerName,
-  portrait,
+  portrait: getCharacterImage(speakerName) || portrait,
 });
 
 /**
@@ -69,7 +111,7 @@ export const chapters: Chapter[] = [
     quizTriggers: [4],
     ally: {
       name: '大賢者アウレリア',
-      image: NPC_IMAGES.sage,
+      image: getCharacterImage('大賢者アウレリア'),
     },
   },
   {
@@ -128,11 +170,11 @@ export const chapters: Chapter[] = [
     quizTriggers: [3, 7, 11, 15, 19, 23, 27, 31, 35, 39],
     ally: {
       name: '乾いた村の長老',
-      image: NPC_IMAGES.villager,
+      image: getCharacterImage('乾いた村の長老'),
     },
     enemy: {
       name: '幻影族の首領',
-      image: ENEMY_IMAGE,
+      image: getCharacterImage('幻影族の首領'),
     },
   },
   {
@@ -191,11 +233,11 @@ export const chapters: Chapter[] = [
     quizTriggers: [3, 7, 11, 15, 19, 23, 27, 31, 35, 39],
     ally: {
       name: '王国の会計官',
-      image: NPC_IMAGES.clerk,
+      image: getCharacterImage('王国の会計官'),
     },
     enemy: {
       name: '黄金の暴君',
-      image: ENEMY_IMAGE,
+      image: getCharacterImage('黄金の暴君'),
     },
   },
   {
@@ -254,11 +296,11 @@ export const chapters: Chapter[] = [
     quizTriggers: [3, 7, 11, 15, 19, 23, 27, 31, 35, 39],
     ally: {
       name: '若き騎士団員',
-      image: NPC_IMAGES.knight,
+      image: getCharacterImage('若き騎士団員'),
     },
     enemy: {
       name: '霧の支配者',
-      image: ENEMY_IMAGE,
+      image: getCharacterImage('霧の支配者'),
     },
   },
   {
@@ -317,11 +359,11 @@ export const chapters: Chapter[] = [
     quizTriggers: [3, 7, 11, 15, 19, 23, 27, 31, 35, 39],
     ally: {
       name: '情報守護官',
-      image: NPC_IMAGES.guard,
+      image: getCharacterImage('情報守護官'),
     },
     enemy: {
       name: '影の参謀',
-      image: ENEMY_IMAGE,
+      image: getCharacterImage('影の参謀'),
     },
   },
   {
@@ -380,11 +422,11 @@ export const chapters: Chapter[] = [
     quizTriggers: [3, 7, 11, 15, 19, 23, 27, 31, 35, 39],
     ally: {
       name: '時計塔の職人',
-      image: NPC_IMAGES.artisan,
+      image: getCharacterImage('時計塔の職人'),
     },
     enemy: {
       name: '時を奪う魔',
-      image: ENEMY_IMAGE,
+      image: getCharacterImage('時を奪う魔'),
     },
   },
   {
@@ -443,11 +485,11 @@ export const chapters: Chapter[] = [
     quizTriggers: [3, 7, 11, 15, 19, 23, 27, 31, 35, 39],
     ally: {
       name: '大賢者アウレリア',
-      image: NPC_IMAGES.sage,
+      image: getCharacterImage('大賢者アウレリア'),
     },
     enemy: {
       name: '魔王コンプラ・ブレイカー',
-      image: ENEMY_IMAGE,
+      image: getCharacterImage('魔王コンプラ・ブレイカー'),
     },
   },
 ];

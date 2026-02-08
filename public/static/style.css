@@ -251,3 +251,32 @@ img {
   transform: translateY(-2px);
   filter: brightness(1.1);
 }
+
+.dq-compendium-card {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  padding: 14px;
+  border-radius: 16px;
+  background: rgba(17, 25, 45, 0.85);
+  border: 1px solid rgba(247, 215, 116, 0.2);
+  box-shadow: 0 18px 30px rgba(6, 10, 24, 0.35);
+}
+
+.dq-compendium-card img {
+  width: 72px;
+  height: 72px;
+  border-radius: 14px;
+  border: 2px solid rgba(247, 215, 116, 0.35);
+  object-fit: cover;
+  background: #0b1220;
+}
+
+.dq-compendium-locked {
+  filter: grayscale(1);
+  opacity: 0.65;
+}
+
+.dq-compendium-meta {
+  color: #cbd5f5;
+}

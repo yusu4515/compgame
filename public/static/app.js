@@ -18,6 +18,8 @@ const AppState = {
   adminPage: 0,
   adminDomain: '',
   adminEmployeeId: null,
+  characterCatalog: [],
+  encounteredCharacters: new Set(),
 };
 
 const AssetUrls = {
@@ -27,6 +29,154 @@ const AssetUrls = {
   uiAssets: '/static/assets/visuals/ui-assets.png',
   avatarLineup: '/static/assets/visuals/avatar-lineup.png',
 };
+
+const CharacterImages = {
+  大賢者アウレリア: '大賢者アウレリア.png',
+  乾いた村の長老: '乾いた村の長老.png',
+  村の治療師: '村の治療師.png',
+  旅の商人: '旅の商人.png',
+  若き旅人: '若き旅人.png',
+  市場の番人: '市場の番人.png',
+  村の若者: '村の若者.png',
+  砂漠の契約魔導師: '砂漠の契約魔導士.png',
+  密約の仲介人: '密約の仲介人.png',
+  幻影族の首領: '幻影族の首領.png',
+  王国の会計官: '王国の会計官.png',
+  監査役の騎士: '監査役の騎士.png',
+  迷宮の主の手下: '迷宮の主の手下.png',
+  予言者の商人: '預言者の商人.png',
+  黄金の暴君: '黄金の暴君.png',
+  若き騎士団員: '若き騎士団員.png',
+  絶対君主の隊長: '絶対君主の隊長.png',
+  森の妖精: '森の妖精.png',
+  毒霧族の策士: '毒霧族の策士.png',
+  新任の騎士: '新任の騎士.png',
+  通報を担う騎士: '通報を担う騎士.png',
+  霧の支配者: '霧の支配者.png',
+  情報守護官: '情報守護官.png',
+  なりすましの密偵: 'なりすましの密偵.png',
+  酒場の主人: '酒場の主人.png',
+  影の解析者: '影の解析者.png',
+  影の参謀: '影の参謀.png',
+  時計塔の職人: '時計塔の職人.png',
+  現場監督: '現場監督.png',
+  怠惰族の幻聴: '怠惰族の幻聴.png',
+  時を奪う魔: '時を奪う魔.png',
+  魔王コンプラ・ブレイカー: '魔王コンプラ・ブレイカー.png',
+  五つの聖域の仲間: '五つの聖域の仲間.png',
+};
+
+const CharacterDescriptions = {
+  大賢者アウレリア: '王国を導く大賢者。守護者に使命を授ける。',
+  乾いた村の長老: '水不足の村を守る慎重な長老。',
+  村の治療師: '村の健康を支える薬師。',
+  旅の商人: '砂漠を巡る情報通の商人。',
+  若き旅人: '純朴で契約に惑う旅人。',
+  市場の番人: '市場秩序を守る衛兵。',
+  村の若者: '村の未来を案じる若者。',
+  砂漠の契約魔導師: '不当契約を操る砂漠の魔導師。',
+  密約の仲介人: '闇取引を取り仕切る黒幕。',
+  幻影族の首領: '虚偽表示を操る幻影族の首領。',
+  王国の会計官: '実直で誠実な会計官。',
+  監査役の騎士: '不正を見抜く監査役の騎士。',
+  迷宮の主の手下: '公私混同に加担する手下。',
+  予言者の商人: '未公表情報を利用する商人。',
+  黄金の暴君: '富と権力に溺れる暴君。',
+  若き騎士団員: '恐怖に沈黙する騎士団員。',
+  絶対君主の隊長: '恐怖で統率する隊長。',
+  森の妖精: '差別に傷つく森の住人。',
+  毒霧族の策士: '仲間を貶める策略家。',
+  新任の騎士: '偏見に苦しむ新人騎士。',
+  通報を担う騎士: '内部通報の笛を守る騎士。',
+  霧の支配者: '恐怖と沈黙を操る支配者。',
+  情報守護官: '王国の機密を守る情報官。',
+  なりすましの密偵: '偽装と詐欺で侵入する密偵。',
+  酒場の主人: '不用意な発言の危険を伝える。',
+  影の解析者: 'サイバー侵入を担う解析者。',
+  影の参謀: '情報戦を指揮する参謀。',
+  時計塔の職人: '過重労働で疲弊する職人。',
+  現場監督: '現場を支える責任者。',
+  怠惰族の幻聴: '休む者を責め立てる幻聴。',
+  時を奪う魔: '時間搾取を象徴する魔物。',
+  魔王コンプラ・ブレイカー: '成果至上主義を掲げる魔王。',
+  五つの聖域の仲間: '各章で助ける仲間たちの象徴。',
+};
+
+function getCharacterImagePath(name) {
+  const file = CharacterImages[name];
+  return file ? `/static/assets/characters/${encodeURIComponent(file)}` : AssetUrls.avatarLineup;
+}
+
+function getEncounterStorageKey() {
+  return AppState.employeeId ? `encounteredCharacters:${AppState.employeeId}` : 'encounteredCharacters:guest';
+}
+
+function loadEncounteredCharacters() {
+  const key = getEncounterStorageKey();
+  const stored = localStorage.getItem(key);
+  AppState.encounteredCharacters = new Set(stored ? JSON.parse(stored) : []);
+}
+
+function saveEncounteredCharacters() {
+  const key = getEncounterStorageKey();
+  localStorage.setItem(key, JSON.stringify(Array.from(AppState.encounteredCharacters)));
+}
+
+function markEncounteredCharacter(name) {
+  if (!name || name === getHeroName() || name === '語り部') return;
+  if (!AppState.encounteredCharacters.has(name)) {
+    AppState.encounteredCharacters.add(name);
+    saveEncounteredCharacters();
+  }
+}
+
+function parseEpisodeMeta(text) {
+  if (!text) return null;
+  const match = text.match(/第(\d+)話「([^」]+)」/);
+  return match ? { no: match[1], title: match[2] } : null;
+}
+
+function buildCharacterCatalog(chapters) {
+  const entries = new Map();
+  chapters.forEach((chapter) => {
+    let currentEpisode = { no: '', title: '' };
+    let firstEpisode = null;
+
+    chapter.narration.forEach((line) => {
+      const meta = parseEpisodeMeta(line.text || '');
+      if (meta) {
+        currentEpisode = meta;
+        if (!firstEpisode) firstEpisode = meta;
+      }
+      const speaker = line.speakerName;
+      if (speaker && speaker !== '語り部' && !entries.has(speaker)) {
+        entries.set(speaker, {
+          name: speaker,
+          description: CharacterDescriptions[speaker] || `${chapter.title}で出会う人物。`,
+          chapterId: chapter.id,
+          chapterTitle: `${chapter.title} ${chapter.subtitle}`,
+          episodeNo: currentEpisode.no,
+          episodeTitle: currentEpisode.title,
+        });
+      }
+    });
+
+    const fallbackEpisode = firstEpisode || currentEpisode;
+    [chapter.ally?.name, chapter.enemy?.name].filter(Boolean).forEach((name) => {
+      if (!entries.has(name)) {
+        entries.set(name, {
+          name,
+          description: CharacterDescriptions[name] || `${chapter.title}で出会う人物。`,
+          chapterId: chapter.id,
+          chapterTitle: `${chapter.title} ${chapter.subtitle}`,
+          episodeNo: fallbackEpisode.no,
+          episodeTitle: fallbackEpisode.title,
+        });
+      }
+    });
+  });
+  return Array.from(entries.values());
+}
 
 const DomainLabels = {
   legal: 'ほうむ（げんえいぞく）',
@@ -103,6 +253,7 @@ async function fetchAvatars() {
 async function fetchChapters() {
   const response = await axios.get('/api/chapters');
   AppState.chapters = response.data.chapters;
+  AppState.characterCatalog = buildCharacterCatalog(AppState.chapters);
 }
 
 function applyLoginResponse(data) {
@@ -114,6 +265,7 @@ function applyLoginResponse(data) {
   if (data.profile?.employeeId) {
     localStorage.setItem('employeeId', data.profile.employeeId);
     AppState.employeeId = data.profile.employeeId;
+    loadEncounteredCharacters();
   }
 
   if (data.loginBonus?.coins) {
@@ -359,7 +511,10 @@ function renderDashboard() {
           </div>
         </div>
 
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <button onclick="renderCharacterCompendium()" class="bg-slate-800 text-white py-4 rounded-xl font-bold">
+            キャラ図鑑
+          </button>
           <button onclick="showRanking()" class="bg-slate-800 text-white py-4 rounded-xl font-bold">
             週次ランキング
           </button>
@@ -417,6 +572,48 @@ function renderStorySelect() {
                 </div>
                 <p class="text-xs text-slate-400">${softenText(chapter.category)}</p>
               </div>`;
+            })
+            .join('')}
+        </div>
+        ${renderAdminFab()}
+      </div>
+    </div>
+  `;
+}
+
+function renderCharacterCompendium() {
+  const app = document.getElementById('app');
+  const entries = AppState.characterCatalog || [];
+  const encountered = AppState.encounteredCharacters || new Set();
+
+  app.innerHTML = `
+    <div class="min-h-screen bg-slate-950 p-8" style="background-image: linear-gradient(rgba(15,23,42,0.92), rgba(15,23,42,0.92)), url('${AssetUrls.uiAssets}'); background-size: cover; background-position: center;">
+      <div class="max-w-6xl mx-auto glass rounded-3xl p-8">
+        <div class="flex items-center justify-between mb-6">
+          <h2 class="text-2xl font-bold">キャラ図鑑</h2>
+          <button onclick="renderDashboard()" class="text-sm text-slate-300">戻る</button>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          ${entries
+            .map((entry) => {
+              const unlocked = encountered.has(entry.name);
+              const image = getCharacterImagePath(entry.name);
+              const episodeLabel = entry.episodeNo
+                ? `第${entry.episodeNo}話「${entry.episodeTitle}」`
+                : '';
+              const encounterLabel = entry.chapterTitle
+                ? `${entry.chapterTitle} ${episodeLabel}`.trim()
+                : '';
+              return `
+                <div class="dq-compendium-card ${unlocked ? '' : 'dq-compendium-locked'}">
+                  <img src="${image}" alt="${entry.name}" />
+                  <div>
+                    <h3 class="font-semibold">${entry.name}</h3>
+                    <p class="dq-compendium-desc text-sm mt-1">${unlocked ? entry.description : 'まだ出会っていない。'}</p>
+                    <p class="dq-compendium-meta text-xs mt-2">${unlocked ? `出会い: ${encounterLabel}` : ''}</p>
+                  </div>
+                </div>
+              `;
             })
             .join('')}
         </div>
@@ -653,6 +850,9 @@ function renderStoryScene() {
   const leftMeta = resolveRoleMeta('hero', chapter, heroName, heroPortrait);
   const rightMeta = resolveRoleMeta(lineMeta.partnerRole === 'enemy' ? 'enemy' : 'ally', chapter, heroName, heroPortrait);
   const activeRole = lineMeta.role;
+
+  markEncounteredCharacter(leftMeta.name);
+  markEncounteredCharacter(rightMeta.name);
 
   app.innerHTML = `
     <div class="min-h-screen bg-slate-950 p-8" style="background-image: linear-gradient(rgba(15,23,42,0.6), rgba(12,18,34,0.85)), url('${AssetUrls.keyVisual}'); background-size: cover; background-position: center;">
@@ -1036,6 +1236,7 @@ function logout() {
   AppState.profile = null;
   AppState.stats = null;
   AppState.adminEmployeeId = null;
+  AppState.encounteredCharacters = new Set();
   renderLogin();
 }
 
@@ -1102,6 +1303,7 @@ async function init() {
   if (AppState.employeeId) {
     try {
       await fetchProfile();
+      loadEncounteredCharacters();
       renderDashboard();
       return;
     } catch (error) {
