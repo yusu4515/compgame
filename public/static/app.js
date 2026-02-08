@@ -18,8 +18,15 @@ const AppState = {
   adminPage: 0,
   adminDomain: '',
   adminEmployeeId: null,
+  adminUsers: [],
+  adminUserTotal: 0,
+  adminUserPage: 0,
+  adminView: 'questions',
   characterCatalog: [],
   encounteredCharacters: new Set(),
+  history: [],
+  practiceQuestion: null,
+  practiceResult: null,
 };
 
 const AssetUrls = {
@@ -134,6 +141,48 @@ function parseEpisodeMeta(text) {
   if (!text) return null;
   const match = text.match(/第(\d+)話「([^」]+)」/);
   return match ? { no: match[1], title: match[2] } : null;
+}
+
+function buildEpisodeList(chapter) {
+  const episodes = [];
+  chapter.narration.forEach((line, index) => {
+    const meta = parseEpisodeMeta(line.text || '');
+    if (meta) {
+      episodes.push({
+        no: meta.no,
+        title: meta.title,
+        startIndex: index,
+        endIndex: chapter.narration.length - 1,
+      });
+    }
+  });
+  if (episodes.length === 0) {
+    return [
+      {
+        no: '1',
+        title: chapter.subtitle,
+        startIndex: 0,
+        endIndex: chapter.narration.length - 1,
+      },
+    ];
+  }
+  episodes.forEach((episode, idx) => {
+    const next = episodes[idx + 1];
+    episode.endIndex = next ? next.startIndex - 1 : chapter.narration.length - 1;
+  });
+  return episodes;
+}
+
+function resolveEpisode(chapter, index) {
+  const episodes = buildEpisodeList(chapter);
+  return (
+    episodes.find((episode) => index >= episode.startIndex && index <= episode.endIndex) || episodes[0]
+  );
+}
+
+function getEpisodeIndex(episode, chapter) {
+  const episodes = buildEpisodeList(chapter);
+  return episodes.findIndex((item) => item.no === episode.no && item.startIndex === episode.startIndex);
 }
 
 function buildCharacterCatalog(chapters) {
@@ -313,6 +362,18 @@ async function fetchAdminQuestions() {
   AppState.adminTotal = response.data.total;
 }
 
+async function fetchAdminUsers() {
+  const response = await axios.get('/api/admin/users', {
+    params: {
+      adminEmployeeId: AppState.adminEmployeeId,
+      limit: 10,
+      offset: AppState.adminUserPage * 10,
+    },
+  });
+  AppState.adminUsers = response.data.users;
+  AppState.adminUserTotal = response.data.total;
+}
+
 async function updateQuestion(questionId, payload) {
   if (!AppState.adminEmployeeId) {
     throw new Error('admin login required');
@@ -331,6 +392,13 @@ async function fetchNextQuestion(domain) {
   AppState.quizStartTime = performance.now();
 }
 
+async function fetchHistory() {
+  const response = await axios.get('/api/questions/history', {
+    params: { employeeId: AppState.employeeId, limit: 30 },
+  });
+  AppState.history = response.data.history || [];
+}
+
 async function submitAnswer(choiceIndex) {
   const timeMs = Math.round(performance.now() - AppState.quizStartTime);
   const response = await axios.post('/api/questions/answer', {
@@ -341,6 +409,17 @@ async function submitAnswer(choiceIndex) {
   });
   AppState.lastResult = response.data.result;
   await fetchProfile();
+}
+
+async function updateNickname(nickname) {
+  const response = await axios.post('/api/profile/nickname', {
+    employeeId: AppState.employeeId,
+    nickname,
+  });
+  AppState.profile = response.data.profile;
+  AppState.stats = response.data.stats;
+  AppState.story = response.data.story;
+  AppState.town = response.data.town;
 }
 
 function renderLogin() {
@@ -479,8 +558,8 @@ function renderDashboard() {
 
         <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
           <div class="glass rounded-2xl p-6">
-            <h3 class="font-semibold mb-4">こんしゅうの スコア</h3>
-            <p class="text-3xl font-bold text-yellow-300">${stats.weeklyScore}</p>
+            <h3 class="font-semibold mb-4">こんしゅうの コイン</h3>
+            <p class="text-3xl font-bold text-yellow-300">${stats.weeklyCoins}</p>
             <p class="text-xs text-slate-400">まいしゅう げつよう りせっと</p>
           </div>
           <div class="glass rounded-2xl p-6">
@@ -494,11 +573,11 @@ function renderDashboard() {
               <span>こんせい: ${stats.mixedKills}</span>
             </div>
           </div>
-          <div class="glass rounded-2xl p-6">
-            <h3 class="font-semibold mb-4">ものがたり しんこう</h3>
+          <div class="glass rounded-2xl p-6 dq-story-card">
+            <h3 class="font-semibold mb-2">ものがたり しんこう</h3>
             <p class="text-sm text-slate-200">いま: ${softenText(getChapterTitle(AppState.story.currentChapter))}</p>
             <p class="text-xs text-slate-400">クリア すう: ${AppState.story.clearedChapters.length}</p>
-            <button onclick="renderStorySelect()" class="mt-4 w-full bg-purple-500/80 hover:bg-purple-500 text-white py-2 rounded-lg">ものがたりへ</button>
+            <button onclick="renderStorySelect()" class="mt-4 w-full dq-story-cta">ものがたりへ</button>
           </div>
           <div class="glass rounded-2xl p-6">
             <h3 class="font-semibold mb-4">じょうか じょうきょう</h3>
@@ -511,12 +590,27 @@ function renderDashboard() {
           </div>
         </div>
 
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div class="glass rounded-2xl p-6">
+          <h3 class="font-semibold mb-3">いままでの はなし</h3>
+          <p class="text-sm text-slate-200">${softenText(getStoryRecap().title)}</p>
+          <p class="text-sm text-slate-300 mt-2">${softenText(getStoryRecap().summary)}</p>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-6 gap-4">
+          <button onclick="renderStorySelect()" class="bg-purple-500/90 hover:bg-purple-500 text-white py-4 rounded-xl font-bold">
+            ものがたり
+          </button>
           <button onclick="renderCharacterCompendium()" class="bg-slate-800 text-white py-4 rounded-xl font-bold">
             キャラ図鑑
           </button>
+          <button onclick="renderHistory()" class="bg-slate-800 text-white py-4 rounded-xl font-bold">
+            たたかいのれきし
+          </button>
           <button onclick="showRanking()" class="bg-slate-800 text-white py-4 rounded-xl font-bold">
             週次ランキング
+          </button>
+          <button onclick="renderSettings()" class="bg-slate-800 text-white py-4 rounded-xl font-bold">
+            せってい
           </button>
           <button onclick="logout()" class="bg-slate-600 text-white py-4 rounded-xl font-bold">
             ログアウト
@@ -531,6 +625,20 @@ function renderDashboard() {
 function getChapterTitle(chapterId) {
   const chapter = AppState.chapters.find((item) => item.id === chapterId);
   return chapter ? `${chapter.title} ${chapter.subtitle}` : 'プロローグ';
+}
+
+function getStoryRecap() {
+  const currentChapterId = AppState.story?.currentChapter;
+  const cleared = AppState.story?.clearedChapters || [];
+  const lastClearedId = cleared.length ? cleared[cleared.length - 1] : currentChapterId;
+  const chapter = AppState.chapters.find((item) => item.id === (lastClearedId || currentChapterId));
+  if (!chapter) {
+    return { title: 'プロローグ', summary: '旅のはじまり。' };
+  }
+  return {
+    title: `${chapter.title} ${chapter.subtitle}`,
+    summary: chapter.scenario || chapter.playerRole || '物語が進行中。',
+  };
 }
 
 function renderStorySelect() {
@@ -564,7 +672,7 @@ function renderStorySelect() {
                 : '';
               return `
               <div class="bg-slate-900/70 p-4 rounded-xl ${locked ? 'opacity-50' : 'cursor-pointer'}" ${
-                locked ? '' : `onclick="openStory('${chapter.id}')"`
+                locked ? '' : `onclick="renderEpisodeSelect('${chapter.id}')"`
               }>
                 <div class="flex items-center justify-between mb-2">
                   <h3 class="font-semibold">${softenText(`${chapter.title} ${chapter.subtitle}`)}</h3>
@@ -573,6 +681,38 @@ function renderStorySelect() {
                 <p class="text-xs text-slate-400">${softenText(chapter.category)}</p>
               </div>`;
             })
+            .join('')}
+        </div>
+        ${renderAdminFab()}
+      </div>
+    </div>
+  `;
+}
+
+function renderEpisodeSelect(chapterId) {
+  const app = document.getElementById('app');
+  const chapter = AppState.chapters.find((item) => item.id === chapterId);
+  if (!chapter) return;
+  const episodes = buildEpisodeList(chapter);
+
+  app.innerHTML = `
+    <div class="min-h-screen bg-slate-950 p-8" style="background-image: linear-gradient(rgba(15,23,42,0.92), rgba(15,23,42,0.92)), url('${AssetUrls.worldMap}'); background-size: cover; background-position: center;">
+      <div class="max-w-5xl mx-auto glass rounded-3xl p-8">
+        <div class="flex items-center justify-between mb-6">
+          <div>
+            <h2 class="text-2xl font-bold">${softenText(`${chapter.title} ${chapter.subtitle}`)}</h2>
+            <p class="text-sm text-slate-300">${softenText(chapter.category)}</p>
+          </div>
+          <button onclick="renderStorySelect()" class="text-sm text-slate-300">戻る</button>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          ${episodes
+            .map((episode) => `
+              <div class="bg-slate-900/70 p-4 rounded-xl cursor-pointer" onclick="openStory('${chapter.id}', ${episode.startIndex})">
+                <h3 class="font-semibold">第${episode.no}話「${softenText(episode.title)}」</h3>
+                <p class="text-xs text-slate-400">${softenText(chapter.stage)}</p>
+              </div>
+            `)
             .join('')}
         </div>
         ${renderAdminFab()}
@@ -622,6 +762,143 @@ function renderCharacterCompendium() {
     </div>
   `;
 }
+
+async function renderHistory() {
+  await fetchHistory();
+  const app = document.getElementById('app');
+  const history = AppState.history || [];
+
+  app.innerHTML = `
+    <div class="min-h-screen bg-slate-950 p-8">
+      <div class="max-w-5xl mx-auto glass rounded-3xl p-8">
+        <div class="flex items-center justify-between mb-6">
+          <h2 class="text-2xl font-bold">たたかいのれきし</h2>
+          <button onclick="renderDashboard()" class="text-sm text-slate-300">戻る</button>
+        </div>
+        <div class="space-y-3">
+          ${history
+            .map((entry) => {
+              const question = entry.question;
+              return `
+                <div class="bg-slate-900/70 p-4 rounded-xl">
+                  <div class="flex items-center justify-between">
+                    <div>
+                      <p class="text-xs text-slate-400">${DomainLabels[question.domain] || ''} Lv.${question.difficulty}</p>
+                      <p class="font-semibold mt-1">${softenText(question.questionText)}</p>
+                      <p class="text-xs text-slate-400 mt-1">${entry.isCorrect ? 'せいかい' : 'ちがうぞ'} / ${new Date(entry.createdAt).toLocaleString('ja-JP')}</p>
+                    </div>
+                    <button onclick="startPractice(${entry.questionId})" class="dq-button">もういちど</button>
+                  </div>
+                </div>
+              `;
+            })
+            .join('')}
+          ${history.length === 0 ? '<p class="text-sm text-slate-300">まだ たたかいの れきしが ありません。</p>' : ''}
+        </div>
+        ${renderAdminFab()}
+      </div>
+    </div>
+  `;
+}
+
+function startPractice(questionId) {
+  const entry = (AppState.history || []).find((item) => item.questionId === questionId);
+  if (!entry) return;
+  AppState.practiceQuestion = entry.question;
+  AppState.practiceResult = null;
+  renderPracticeQuiz();
+}
+
+function renderPracticeQuiz() {
+  const app = document.getElementById('app');
+  const question = AppState.practiceQuestion;
+  if (!question) return;
+
+  app.innerHTML = `
+    <div class="min-h-screen bg-slate-950 p-8">
+      <div class="max-w-4xl mx-auto">
+        <div class="dq-quiz">
+          <div class="flex items-center justify-between mb-3">
+            <span class="text-sm text-purple-200">${DomainLabels[question.domain]}</span>
+            <button onclick="renderHistory()" class="text-sm text-slate-300">戻る</button>
+          </div>
+          <h3 class="text-xl font-semibold mb-4">${softenText(question.questionText)}</h3>
+          <div class="space-y-3">
+            ${question.choices
+              .map(
+                (choice, index) => `
+              <button onclick="answerPractice(${index})" class="dq-choice">
+                <span class="dq-command">${getCommandLabel(index)}</span>
+                <span>${softenText(choice)}</span>
+              </button>`
+              )
+              .join('')}
+          </div>
+          ${AppState.practiceResult ? renderPracticeResultPanel() : ''}
+        </div>
+        ${renderAdminFab()}
+      </div>
+    </div>
+  `;
+}
+
+function answerPractice(choiceIndex) {
+  const question = AppState.practiceQuestion;
+  if (!question) return;
+  const isCorrect = question.correctIndex === choiceIndex;
+  AppState.practiceResult = {
+    isCorrect,
+    correctIndex: question.correctIndex,
+    explanation: question.explanation,
+  };
+  renderPracticeQuiz();
+}
+
+function renderPracticeResultPanel() {
+  const result = AppState.practiceResult;
+  const question = AppState.practiceQuestion;
+  if (!result || !question) return '';
+  return `
+    <div class="bg-slate-900/70 rounded-xl p-4 mt-4">
+      <p class="font-semibold">${result.isCorrect ? 'せいかい' : 'ちがうぞ'}</p>
+      <p class="text-sm text-slate-200 mt-1">こたえ: ${softenText(question.choices[result.correctIndex])}</p>
+      <p class="text-sm text-slate-200 mt-2">${softenText(result.explanation)}</p>
+    </div>
+  `;
+}
+
+function renderSettings() {
+  const app = document.getElementById('app');
+  const nickname = AppState.profile?.nickname || '';
+
+  app.innerHTML = `
+    <div class="min-h-screen bg-slate-950 p-8">
+      <div class="max-w-3xl mx-auto glass rounded-3xl p-8">
+        <div class="flex items-center justify-between mb-6">
+          <h2 class="text-2xl font-bold">せってい</h2>
+          <button onclick="renderDashboard()" class="text-sm text-slate-300">戻る</button>
+        </div>
+        <label class="block text-sm text-slate-200">ニックネーム</label>
+        <input id="settingsNickname" type="text" class="w-full px-4 py-3 rounded-lg text-slate-900 mt-2" value="${nickname}" />
+        <button onclick="handleUpdateNickname()" class="mt-4 dq-button">変更を保存</button>
+        <p class="text-xs text-slate-400 mt-3">従業員IDの変更は管理画面からのみ行えます。</p>
+        ${renderAdminFab()}
+      </div>
+    </div>
+  `;
+}
+
+async function handleUpdateNickname() {
+  const nickname = document.getElementById('settingsNickname').value.trim();
+  if (!nickname) {
+    showToast('ニックネームを入力してください', 'error');
+    return;
+  }
+  await updateNickname(nickname);
+  showToast('ニックネームを更新しました', 'success');
+  renderDashboard();
+}
+
 function getStoryDomain(chapterId) {
   const mapping = {
     chapter1: 'legal',
@@ -658,18 +935,27 @@ function buildQuizTriggers(chapter) {
   return triggers;
 }
 
-function openStory(chapterId) {
+function getQuizPointerForIndex(triggers, index) {
+  return triggers.filter((trigger) => trigger <= index).length;
+}
+
+function openStory(chapterId, startIndex = 0) {
   const chapter = AppState.chapters.find((item) => item.id === chapterId);
   if (!chapter) return;
+  const episodes = buildEpisodeList(chapter);
+  const episode = resolveEpisode(chapter, startIndex);
 
   AppState.currentStory = {
     chapter,
-    index: 0,
+    index: episode.startIndex,
     quizTriggers: buildQuizTriggers(chapter),
-    quizPointer: 0,
+    quizPointer: getQuizPointerForIndex(buildQuizTriggers(chapter), episode.startIndex),
     pendingQuiz: false,
     waitingQuiz: false,
     quizResult: null,
+    episode,
+    episodes,
+    episodeEndReached: false,
     battle: {
       playerHp: 6,
       enemyHp: 6,
@@ -689,8 +975,15 @@ async function handleStoryAdvance() {
   if (!story) return;
   if (story.pendingQuiz || story.waitingQuiz || story.quizResult) return;
 
+  if (story.episode && story.index >= story.episode.endIndex && story.battle?.enemyHp <= 0) {
+    story.episodeEndReached = true;
+    renderStoryScene();
+    return;
+  }
+
   const nextIndex = Math.min(story.index + 1, story.chapter.narration.length - 1);
   story.index = nextIndex;
+  story.episode = resolveEpisode(story.chapter, story.index);
 
   const trigger = story.quizTriggers[story.quizPointer];
   if (trigger !== undefined && nextIndex >= trigger) {
@@ -706,6 +999,7 @@ async function startStoryQuiz() {
   if (!story) return;
   story.pendingQuiz = false;
   story.waitingQuiz = true;
+  story.episodeEndReached = false;
   await fetchNextQuestion(getStoryDomain(story.chapter.id));
   startStoryTimer();
   renderStoryScene();
@@ -842,6 +1136,10 @@ function renderStoryScene() {
   const line = lineMeta.text;
   const isLast = story.index >= chapter.narration.length - 1;
   const speaker = softenText(lineMeta.speakerName);
+  const episode = story.episode || resolveEpisode(chapter, story.index);
+  story.episode = episode;
+  const episodeLabel = episode ? `第${episode.no}話「${episode.title}」` : '';
+  const showEpisodeChoice = Boolean(story.episodeEndReached && story.battle?.enemyHp <= 0);
   const nextHint = story.pendingQuiz
     ? 'たたかい じゅんび'
     : story.waitingQuiz || story.quizResult
@@ -855,13 +1153,14 @@ function renderStoryScene() {
   markEncounteredCharacter(rightMeta.name);
 
   app.innerHTML = `
-    <div class="min-h-screen bg-slate-950 p-8" style="background-image: linear-gradient(rgba(15,23,42,0.6), rgba(12,18,34,0.85)), url('${AssetUrls.keyVisual}'); background-size: cover; background-position: center;">
-      <div class="max-w-6xl mx-auto">
+    <div class="min-h-screen bg-slate-950 p-8 dq-story-layout" style="background-image: linear-gradient(rgba(15,23,42,0.6), rgba(12,18,34,0.85)), url('${AssetUrls.keyVisual}'); background-size: cover; background-position: center;">
+      <div class="max-w-7xl mx-auto">
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div class="lg:col-span-2 space-y-4">
             <div class="glass rounded-3xl p-6">
               <h2 class="text-2xl font-bold">${softenText(`${chapter.title} ${chapter.subtitle}`)}</h2>
               <p class="text-sm text-slate-300">${softenText(chapter.category)}</p>
+              <p class="text-sm text-purple-200 mt-2">${softenText(episodeLabel)}</p>
             </div>
             <div class="dq-dialog" onclick="handleStoryAdvance()">
               <div class="dq-dialog-portraits">
@@ -881,6 +1180,7 @@ function renderStoryScene() {
             ${story.pendingQuiz ? renderStoryIntroPanel() : ''}
             ${story.waitingQuiz ? renderStoryQuizPanel() : ''}
             ${story.quizResult ? renderStoryResultPanel() : ''}
+            ${showEpisodeChoice ? renderEpisodeChoicePanel() : ''}
             <div class="flex gap-3 mt-2">
               ${isLast && !story.waitingQuiz && !story.quizResult ? `<button onclick="clearStory('${chapter.id}')" class="dq-button">章をクリア</button>` : ''}
               <button onclick="renderStorySelect()" class="dq-button-secondary">章選択へ</button>
@@ -910,6 +1210,48 @@ function renderStoryScene() {
       </div>
     </div>
   `;
+}
+
+function renderEpisodeChoicePanel() {
+  const story = AppState.currentStory;
+  if (!story?.episode) return '';
+  const episodes = story.episodes || buildEpisodeList(story.chapter);
+  const currentIndex = getEpisodeIndex(story.episode, story.chapter);
+  const hasNext = currentIndex >= 0 && currentIndex < episodes.length - 1;
+  return `
+    <div class="dq-quiz" onclick="event.stopPropagation()">
+      <h4 class="font-semibold mb-2">つぎは どうする?</h4>
+      <div class="flex flex-wrap gap-2">
+        ${hasNext ? '<button onclick="goToNextEpisode()" class="dq-button">つぎの はなしへ</button>' : ''}
+        <button onclick="renderDashboard()" class="dq-button-secondary">ホームへ もどる</button>
+      </div>
+    </div>
+  `;
+}
+
+function goToNextEpisode() {
+  const story = AppState.currentStory;
+  if (!story?.episode) return;
+  const episodes = story.episodes || buildEpisodeList(story.chapter);
+  const currentIndex = getEpisodeIndex(story.episode, story.chapter);
+  const nextEpisode = episodes[currentIndex + 1];
+  if (!nextEpisode) {
+    renderDashboard();
+    return;
+  }
+  story.index = nextEpisode.startIndex;
+  story.episode = nextEpisode;
+  story.episodeEndReached = false;
+  story.pendingQuiz = false;
+  story.waitingQuiz = false;
+  story.quizResult = null;
+  story.quizPointer = getQuizPointerForIndex(story.quizTriggers, nextEpisode.startIndex);
+  if (story.battle) {
+    story.battle.enemyHp = story.battle.maxEnemyHp;
+    story.battle.playerHp = story.battle.maxPlayerHp;
+    story.battle.lastEffect = '';
+  }
+  renderStoryScene();
 }
 function renderStoryQuizPanel() {
   const question = AppState.currentQuestion;
@@ -1017,6 +1359,7 @@ function closeStoryResult() {
   const story = AppState.currentStory;
   const battle = story?.battle;
   story.quizResult = null;
+  story.episodeEndReached = false;
 
   if (battle && battle.playerHp <= 0) {
     battle.playerHp = battle.maxPlayerHp;
@@ -1026,6 +1369,8 @@ function closeStoryResult() {
     story.quizPointer = 0;
     story.pendingQuiz = false;
     story.waitingQuiz = false;
+    story.episode = resolveEpisode(story.chapter, story.index);
+    story.episodeEndReached = false;
     showToast('ダンジョンの ふりだしに もどった', 'error');
   }
 
@@ -1057,7 +1402,7 @@ async function showRanking() {
     <div class="min-h-screen bg-slate-950 p-8">
       <div class="max-w-4xl mx-auto glass rounded-3xl p-8">
         <div class="flex items-center justify-between mb-6">
-          <h2 class="text-2xl font-bold">週次ランキング</h2>
+          <h2 class="text-2xl font-bold">週次ランキング（週間コイン）</h2>
           <button onclick="renderDashboard()" class="text-sm text-slate-300">戻る</button>
         </div>
         <div class="mb-6">
@@ -1076,7 +1421,7 @@ async function showRanking() {
                   <p class="text-xs text-slate-400">Lv.${item.level} ${item.titlePrimary || ''}</p>
                 </div>
               </div>
-              <div class="text-yellow-300 font-semibold">${item.weeklyScore}</div>
+              <div class="text-yellow-300 font-semibold">${item.weeklyCoins}枚</div>
             </div>`
             )
             .join('')}
@@ -1101,60 +1446,117 @@ async function renderAdmin() {
     return;
   }
 
-  await fetchAdminQuestions();
+  const isUsersView = AppState.adminView === 'users';
+  if (isUsersView) {
+    await fetchAdminUsers();
+  } else {
+    await fetchAdminQuestions();
+  }
+
   const app = document.getElementById('app');
-  const totalPages = Math.ceil(AppState.adminTotal / 10);
+  const totalPages = isUsersView
+    ? Math.ceil(AppState.adminUserTotal / 10)
+    : Math.ceil(AppState.adminTotal / 10);
+
+  const questionFilters = `
+    <div class="flex flex-wrap gap-2 mb-4">
+      ${['', 'legal', 'finance', 'hr', 'labor', 'infosec', 'mixed']
+        .map(
+          (domain) => `
+        <button onclick="setAdminDomain('${domain}')" class="px-3 py-1 rounded-lg ${
+            AppState.adminDomain === domain ? 'bg-purple-500' : 'bg-slate-700'
+          }">
+          ${domain ? DomainLabels[domain] : '全領域'}
+        </button>`
+        )
+        .join('')}
+    </div>
+  `;
+
+  const questionsPanel = `
+    ${questionFilters}
+    <div class="space-y-3">
+      ${AppState.adminQuestions
+        .map(
+          (question) => `
+        <div class="bg-slate-900/70 p-4 rounded-xl">
+          <div class="flex items-center justify-between mb-2">
+            <p class="text-sm text-slate-300">ID ${question.id} | ${DomainLabels[question.domain]} | Lv.${question.difficulty}</p>
+            <button onclick="openEditQuestion(${question.id})" class="text-sm text-yellow-300">編集</button>
+          </div>
+          <p class="font-semibold">${question.questionText}</p>
+          <p class="text-xs text-slate-400 mt-2">正解: ${question.choices[question.correctIndex]}</p>
+        </div>`
+        )
+        .join('')}
+    </div>
+  `;
+
+  const usersPanel = `
+    <div class="space-y-3">
+      ${AppState.adminUsers
+        .map(
+          (user) => `
+        <div class="bg-slate-900/70 p-4 rounded-xl">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <p class="font-semibold">${user.nickname} <span class="text-xs text-slate-400">(${user.employeeId})</span></p>
+              <p class="text-xs text-slate-400">Lv.${user.level} / XP ${user.xp} / コイン ${user.coins}</p>
+              <p class="text-xs text-slate-400">進行: ${softenText(getChapterTitle(user.currentChapter))} / クリア ${user.clearedCount}</p>
+            </div>
+            <div class="text-xs text-slate-300">
+              <p>週間コイン: ${user.weeklyCoins}</p>
+              <p>最終ログイン: ${user.lastLoginAt ? new Date(user.lastLoginAt).toLocaleString('ja-JP') : '記録なし'}</p>
+            </div>
+          </div>
+        </div>`
+        )
+        .join('')}
+    </div>
+  `;
 
   app.innerHTML = `
     <div class="min-h-screen bg-slate-950 p-8">
       <div class="max-w-5xl mx-auto glass rounded-3xl p-8">
         <div class="flex items-center justify-between mb-6">
           <div>
-            <h2 class="text-2xl font-bold">問題エディタ</h2>
+            <h2 class="text-2xl font-bold">管理ダッシュボード</h2>
             <p class="text-xs text-slate-400">管理者: ${AppState.adminEmployeeId}</p>
           </div>
           <button onclick="renderDashboard()" class="text-sm text-slate-300">戻る</button>
         </div>
-        <div class="flex flex-wrap gap-2 mb-4">
-          ${['', 'legal', 'finance', 'hr', 'labor', 'infosec', 'mixed']
-            .map(
-              (domain) => `
-            <button onclick="setAdminDomain('${domain}')" class="px-3 py-1 rounded-lg ${
-                AppState.adminDomain === domain ? 'bg-purple-500' : 'bg-slate-700'
-              }">
-              ${domain ? DomainLabels[domain] : '全領域'}
-            </button>`
-            )
-            .join('')}
+        <div class="flex gap-2 mb-6">
+          <button onclick="setAdminView('questions')" class="px-4 py-2 rounded-lg ${
+            AppState.adminView === 'questions' ? 'bg-purple-500' : 'bg-slate-700'
+          }">問題管理</button>
+          <button onclick="setAdminView('users')" class="px-4 py-2 rounded-lg ${
+            AppState.adminView === 'users' ? 'bg-purple-500' : 'bg-slate-700'
+          }">ユーザー管理</button>
         </div>
-        <div class="space-y-3">
-          ${AppState.adminQuestions
-            .map(
-              (question) => `
-            <div class="bg-slate-900/70 p-4 rounded-xl">
-              <div class="flex items-center justify-between mb-2">
-                <p class="text-sm text-slate-300">ID ${question.id} | ${DomainLabels[question.domain]} | Lv.${question.difficulty}</p>
-                <button onclick="openEditQuestion(${question.id})" class="text-sm text-yellow-300">編集</button>
-              </div>
-              <p class="font-semibold">${question.questionText}</p>
-              <p class="text-xs text-slate-400 mt-2">正解: ${question.choices[question.correctIndex]}</p>
-            </div>`
-            )
-            .join('')}
-        </div>
+        ${isUsersView ? usersPanel : questionsPanel}
         <div class="flex items-center justify-between mt-6">
-          <button onclick="prevAdminPage()" class="px-4 py-2 rounded-lg bg-slate-700" ${
-            AppState.adminPage === 0 ? 'disabled' : ''
+          <button onclick="${isUsersView ? 'prevAdminUserPage()' : 'prevAdminPage()'}" class="px-4 py-2 rounded-lg bg-slate-700" ${
+            (isUsersView ? AppState.adminUserPage : AppState.adminPage) === 0 ? 'disabled' : ''
           }>前へ</button>
-          <span class="text-sm text-slate-300">${AppState.adminPage + 1} / ${totalPages || 1}</span>
-          <button onclick="nextAdminPage()" class="px-4 py-2 rounded-lg bg-slate-700" ${
-            AppState.adminPage + 1 >= totalPages ? 'disabled' : ''
+          <span class="text-sm text-slate-300">${(isUsersView ? AppState.adminUserPage : AppState.adminPage) + 1} / ${totalPages || 1}</span>
+          <button onclick="${isUsersView ? 'nextAdminUserPage()' : 'nextAdminPage()'}" class="px-4 py-2 rounded-lg bg-slate-700" ${
+            (isUsersView ? AppState.adminUserPage + 1 : AppState.adminPage + 1) >= totalPages ? 'disabled' : ''
           }>次へ</button>
         </div>
         ${renderAdminFab()}
       </div>
     </div>
   `;
+}
+
+function setAdminView(view) {
+  AppState.adminView = view;
+  if (view === 'users') {
+    AppState.adminUserPage = 0;
+  } else {
+    AppState.adminPage = 0;
+  }
+  renderAdmin();
 }
 
 function setAdminDomain(domain) {
@@ -1170,6 +1572,16 @@ function prevAdminPage() {
 
 function nextAdminPage() {
   AppState.adminPage += 1;
+  renderAdmin();
+}
+
+function prevAdminUserPage() {
+  AppState.adminUserPage = Math.max(0, AppState.adminUserPage - 1);
+  renderAdmin();
+}
+
+function nextAdminUserPage() {
+  AppState.adminUserPage += 1;
   renderAdmin();
 }
 
@@ -1237,6 +1649,9 @@ function logout() {
   AppState.stats = null;
   AppState.adminEmployeeId = null;
   AppState.encounteredCharacters = new Set();
+  AppState.history = [];
+  AppState.practiceQuestion = null;
+  AppState.practiceResult = null;
   renderLogin();
 }
 
