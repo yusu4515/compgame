@@ -280,3 +280,49 @@ img {
 .dq-compendium-meta {
   color: #cbd5f5;
 }
+
+.dq-story-card {
+  border: 1px solid rgba(124, 58, 237, 0.35);
+  box-shadow: 0 20px 35px rgba(15, 23, 42, 0.4);
+}
+
+.dq-story-cta {
+  background: linear-gradient(180deg, #7c3aed 0%, #4c2fb8 100%);
+  border: 1px solid var(--dq-gold);
+  color: #fff7d4;
+  padding: 0.75rem 1.2rem;
+  border-radius: 14px;
+  font-weight: 700;
+  font-size: 1rem;
+  transition: transform 0.15s ease, filter 0.15s ease;
+}
+
+.dq-story-cta:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.1);
+}
+
+@media (min-width: 1024px) {
+  .dq-story-layout .dq-dialog {
+    padding: 28px 30px;
+  }
+
+  .dq-story-layout .dq-dialog .text-lg {
+    font-size: 1.25rem;
+    line-height: 1.7;
+  }
+
+  .dq-story-layout .dq-dialog-portrait img {
+    width: 64px;
+    height: 64px;
+  }
+
+  .dq-story-layout .dq-quiz {
+    padding: 24px 28px;
+  }
+
+  .dq-story-layout .dq-portrait {
+    border-width: 2px;
+    height: 160px;
+  }
+}

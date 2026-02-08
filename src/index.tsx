@@ -177,11 +177,24 @@ async function ensureCoreSchema(DB: D1Database) {
       streak_days INTEGER NOT NULL DEFAULT 0,
       weekly_score INTEGER NOT NULL DEFAULT 0,
       weekly_score_updated DATE,
+      weekly_coins INTEGER NOT NULL DEFAULT 0,
+      weekly_coins_updated DATE,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (employee_id) REFERENCES users(employee_id)
     )`
   ).run();
+
+  const statsInfo = await DB.prepare("PRAGMA table_info('user_stats')").all();
+  const statsColumns = (statsInfo.results ?? []).map((row) => row.name as string);
+
+  if (!statsColumns.includes('weekly_coins')) {
+    await DB.prepare('ALTER TABLE user_stats ADD COLUMN weekly_coins INTEGER NOT NULL DEFAULT 0').run();
+  }
+
+  if (!statsColumns.includes('weekly_coins_updated')) {
+    await DB.prepare('ALTER TABLE user_stats ADD COLUMN weekly_coins_updated DATE').run();
+  }
 
   await DB.prepare(
     `CREATE TABLE IF NOT EXISTS story_progress (
@@ -278,10 +291,10 @@ async function ensureUserStats(DB: D1Database, employeeId: string, weekStart: st
   if (row) return;
 
   await DB.prepare(
-    `INSERT INTO user_stats (employee_id, last_login_at, streak_days, weekly_score, weekly_score_updated)
-     VALUES (?, NULL, 0, 0, ?)`
+    `INSERT INTO user_stats (employee_id, last_login_at, streak_days, weekly_score, weekly_score_updated, weekly_coins, weekly_coins_updated)
+     VALUES (?, NULL, 0, 0, ?, 0, ?)`
   )
-    .bind(employeeId, weekStart)
+    .bind(employeeId, weekStart, weekStart)
     .run();
 }
 
@@ -353,6 +366,7 @@ async function fetchUserProfile(DB: D1Database, employeeId: string) {
     mixedKills: statsRow.mixed_kills as number,
     streakDays: statsRow.streak_days as number,
     weeklyScore: statsRow.weekly_score as number,
+    weeklyCoins: (statsRow.weekly_coins as number) || 0,
     lastLoginAt: statsRow.last_login_at as string | null,
   };
 
@@ -387,9 +401,9 @@ async function createUser(
   ).bind(employeeId, nickname, avatarId).run();
 
   await DB.prepare(
-    `INSERT INTO user_stats (employee_id, last_login_at, streak_days, weekly_score, weekly_score_updated)
-     VALUES (?, ?, 1, 0, ?)`
-  ).bind(employeeId, now.toISOString(), weekStart).run();
+    `INSERT INTO user_stats (employee_id, last_login_at, streak_days, weekly_score, weekly_score_updated, weekly_coins, weekly_coins_updated)
+     VALUES (?, ?, 1, 0, ?, 0, ?)`
+  ).bind(employeeId, now.toISOString(), weekStart, weekStart).run();
 
   await DB.prepare(
     `INSERT INTO story_progress (employee_id, current_chapter, cleared_chapters)
@@ -508,9 +522,11 @@ app.post('/api/auth/login', async (c) => {
      SET last_login_at = ?, streak_days = ?,
          weekly_score = CASE WHEN weekly_score_updated = ? THEN weekly_score ELSE 0 END,
          weekly_score_updated = ?,
+         weekly_coins = CASE WHEN weekly_coins_updated = ? THEN weekly_coins ELSE 0 END,
+         weekly_coins_updated = ?,
          updated_at = CURRENT_TIMESTAMP
      WHERE employee_id = ?`
-  ).bind(now.toISOString(), streakDays, weekStart, weekStart, trimmedEmployeeId).run();
+  ).bind(now.toISOString(), streakDays, weekStart, weekStart, weekStart, weekStart, trimmedEmployeeId).run();
 
   if (loginBonus.coins > 0 || loginBonus.xp > 0) {
     await DB.prepare(
@@ -518,6 +534,14 @@ app.post('/api/auth/login', async (c) => {
        SET coins = coins + ?, xp = xp + ?, updated_at = CURRENT_TIMESTAMP
        WHERE employee_id = ?`
     ).bind(loginBonus.coins, loginBonus.xp, trimmedEmployeeId).run();
+
+    await DB.prepare(
+      `UPDATE user_stats
+       SET weekly_coins = CASE WHEN weekly_coins_updated = ? THEN weekly_coins + ? ELSE ? END,
+           weekly_coins_updated = ?,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE employee_id = ?`
+    ).bind(weekStart, loginBonus.coins, loginBonus.coins, weekStart, trimmedEmployeeId).run();
   }
 
   const profileData = await fetchUserProfile(DB, trimmedEmployeeId);
@@ -565,6 +589,33 @@ app.get('/api/profile/:employeeId', async (c) => {
     story: profileData.story,
     town: profileData.town,
     titles: titles.results,
+  });
+});
+
+app.post('/api/profile/nickname', async (c) => {
+  const { DB } = c.env;
+  const { employeeId, nickname } = await c.req.json();
+  const trimmedEmployeeId = typeof employeeId === 'string' ? employeeId.trim() : '';
+  const trimmedNickname = typeof nickname === 'string' ? nickname.trim() : '';
+
+  if (!trimmedEmployeeId || !trimmedNickname) {
+    return c.json({ error: 'employeeId and nickname are required' }, 400);
+  }
+
+  await DB.prepare(
+    'UPDATE users SET nickname = ?, updated_at = CURRENT_TIMESTAMP WHERE employee_id = ?'
+  ).bind(trimmedNickname, trimmedEmployeeId).run();
+
+  const profileData = await fetchUserProfile(DB, trimmedEmployeeId);
+  if (!profileData) {
+    return c.json({ error: 'User not found' }, 404);
+  }
+
+  return c.json({
+    profile: profileData.profile,
+    stats: profileData.stats,
+    story: profileData.story,
+    town: profileData.town,
   });
 });
 
@@ -696,6 +747,45 @@ app.get('/api/questions/next', async (c) => {
   return c.json({ question });
 });
 
+app.get('/api/questions/history', async (c) => {
+  const { DB } = c.env;
+  const employeeId = c.req.query('employeeId');
+  const limit = Number(c.req.query('limit') || 30);
+
+  if (!employeeId) {
+    return c.json({ error: 'employeeId required' }, 400);
+  }
+
+  const rows = await DB.prepare(
+    `SELECT qa.id as attempt_id, qa.is_correct, qa.score, qa.created_at,
+            q.id as question_id, q.domain, q.difficulty, q.question_text, q.choices, q.correct_index, q.explanation
+     FROM quiz_attempts qa
+     JOIN questions q ON q.id = qa.question_id
+     WHERE qa.employee_id = ?
+     ORDER BY qa.created_at DESC
+     LIMIT ?`
+  ).bind(employeeId, limit).all();
+
+  return c.json({
+    history: rows.results.map((row) => ({
+      attemptId: row.attempt_id,
+      questionId: row.question_id,
+      isCorrect: row.is_correct === 1,
+      score: row.score,
+      createdAt: row.created_at,
+      question: {
+        id: row.question_id,
+        domain: row.domain,
+        difficulty: row.difficulty,
+        questionText: row.question_text,
+        choices: JSON.parse(row.choices as string),
+        correctIndex: row.correct_index,
+        explanation: row.explanation,
+      },
+    })),
+  });
+});
+
 app.post('/api/questions/answer', async (c) => {
   const { DB } = c.env;
   const { employeeId, questionId, choiceIndex, timeMs } = await c.req.json();
@@ -759,9 +849,11 @@ app.post('/api/questions/answer', async (c) => {
     `UPDATE user_stats
      SET weekly_score = CASE WHEN weekly_score_updated = ? THEN weekly_score + ? ELSE ? END,
          weekly_score_updated = ?,
+         weekly_coins = CASE WHEN weekly_coins_updated = ? THEN weekly_coins + ? ELSE ? END,
+         weekly_coins_updated = ?,
          updated_at = CURRENT_TIMESTAMP
      WHERE employee_id = ?`
-  ).bind(weekStart, score, score, weekStart, employeeId).run();
+  ).bind(weekStart, score, score, weekStart, weekStart, coinsGained, coinsGained, weekStart, employeeId).run();
 
   if (isCorrect) {
     const domain = questionRow.domain as string;
@@ -953,16 +1045,59 @@ app.put('/api/admin/questions/:id', async (c) => {
   return c.json({ success: true });
 });
 
+app.get('/api/admin/users', async (c) => {
+  const { DB } = c.env;
+  const adminEmployeeId = c.req.query('adminEmployeeId') || '';
+  const limit = Number(c.req.query('limit') || 20);
+  const offset = Number(c.req.query('offset') || 0);
+
+  if (!adminEmployeeId.trim()) {
+    return c.json({ error: 'adminEmployeeId required' }, 400);
+  }
+
+  const rows = await DB.prepare(
+    `SELECT u.employee_id, u.nickname, u.level, u.xp, u.coins,
+            s.last_login_at, s.weekly_score, s.weekly_coins,
+            sp.current_chapter, sp.cleared_chapters
+     FROM users u
+     JOIN user_stats s ON s.employee_id = u.employee_id
+     JOIN story_progress sp ON sp.employee_id = u.employee_id
+     ORDER BY s.last_login_at DESC
+     LIMIT ? OFFSET ?`
+  ).bind(limit, offset).all();
+
+  const totalRow = await DB.prepare('SELECT COUNT(*) as count FROM users').first();
+
+  return c.json({
+    total: (totalRow?.count as number) || 0,
+    users: rows.results.map((row) => {
+      const clearedChapters = JSON.parse(row.cleared_chapters as string);
+      return {
+        employeeId: row.employee_id,
+        nickname: row.nickname,
+        level: row.level,
+        xp: row.xp,
+        coins: row.coins,
+        weeklyScore: row.weekly_score,
+        weeklyCoins: row.weekly_coins,
+        currentChapter: row.current_chapter,
+        clearedCount: Array.isArray(clearedChapters) ? clearedChapters.length : 0,
+        lastLoginAt: row.last_login_at,
+      };
+    }),
+  });
+});
+
 app.get('/api/ranking/weekly', async (c) => {
   const { DB } = c.env;
   const weekStart = getWeekStart(new Date());
 
   const rankingRows = await DB.prepare(
-    `SELECT u.employee_id, u.nickname, u.avatar_id, u.level, u.title_primary, s.weekly_score
+    `SELECT u.employee_id, u.nickname, u.avatar_id, u.level, u.title_primary, s.weekly_coins
      FROM user_stats s
      JOIN users u ON u.employee_id = s.employee_id
-     WHERE s.weekly_score_updated = ?
-     ORDER BY s.weekly_score DESC
+     WHERE s.weekly_coins_updated = ?
+     ORDER BY s.weekly_coins DESC
      LIMIT 20`
   ).bind(weekStart).all();
 
@@ -973,7 +1108,7 @@ app.get('/api/ranking/weekly', async (c) => {
     avatarId: row.avatar_id,
     level: row.level,
     titlePrimary: row.title_primary,
-    weeklyScore: row.weekly_score,
+    weeklyCoins: row.weekly_coins,
   }));
 
   return c.json({ weekStart, ranking });
@@ -984,11 +1119,11 @@ app.post('/api/slack/weekly-post', async (c) => {
   const weekStart = getWeekStart(new Date());
 
   const rankingRows = await DB.prepare(
-    `SELECT u.employee_id, u.nickname, u.avatar_id, u.level, u.title_primary, s.weekly_score
+    `SELECT u.employee_id, u.nickname, u.avatar_id, u.level, u.title_primary, s.weekly_coins
      FROM user_stats s
      JOIN users u ON u.employee_id = s.employee_id
-     WHERE s.weekly_score_updated = ?
-     ORDER BY s.weekly_score DESC
+     WHERE s.weekly_coins_updated = ?
+     ORDER BY s.weekly_coins DESC
      LIMIT 3`
   ).bind(weekStart).all();
 
@@ -999,14 +1134,14 @@ app.post('/api/slack/weekly-post', async (c) => {
     avatarId: row.avatar_id as string,
     level: row.level as number,
     titlePrimary: row.title_primary as string | null,
-    weeklyScore: row.weekly_score as number,
+    weeklyCoins: row.weekly_coins as number,
   }));
 
   const statements = top3.map((entry) =>
     DB.prepare(
       `INSERT OR REPLACE INTO weekly_rankings (week_start, employee_id, score, rank)
        VALUES (?, ?, ?, ?)`
-    ).bind(weekStart, entry.employeeId, entry.weeklyScore, entry.rank)
+    ).bind(weekStart, entry.employeeId, entry.weeklyCoins, entry.rank)
   );
 
   if (statements.length > 0) {
@@ -1014,7 +1149,7 @@ app.post('/api/slack/weekly-post', async (c) => {
   }
 
   const messageLines = top3.map(
-    (entry) => `#${entry.rank} ${entry.nickname} (Lv.${entry.level}) - ${entry.weeklyScore}pt ${entry.titlePrimary ?? ''}`
+    (entry) => `#${entry.rank} ${entry.nickname} (Lv.${entry.level}) - ${entry.weeklyCoins}枚 ${entry.titlePrimary ?? ''}`
   );
   const message = `🏆 Compliance Quest 週次ランキング TOP3 (${weekStart})\n${messageLines.join('\n')}`;
 
@@ -1053,6 +1188,15 @@ app.post('/api/slack/reaction', async (c) => {
     'UPDATE users SET coins = coins + ?, updated_at = CURRENT_TIMESTAMP WHERE employee_id = ?'
   ).bind(bonus, employeeId).run();
 
+  const weekStart = getWeekStart(new Date());
+  await DB.prepare(
+    `UPDATE user_stats
+     SET weekly_coins = CASE WHEN weekly_coins_updated = ? THEN weekly_coins + ? ELSE ? END,
+         weekly_coins_updated = ?,
+         updated_at = CURRENT_TIMESTAMP
+     WHERE employee_id = ?`
+  ).bind(weekStart, bonus, bonus, weekStart, employeeId).run();
+
   await sendSlack(
     c.env,
     'reaction_bonus',
@@ -1068,20 +1212,20 @@ app.post('/api/slack/weekly-top3', async (c) => {
   const weekStart = getWeekStart(new Date());
 
   const rankingRows = await DB.prepare(
-    `SELECT u.employee_id, u.nickname, s.weekly_score
+    `SELECT u.employee_id, u.nickname, s.weekly_coins
      FROM user_stats s
      JOIN users u ON u.employee_id = s.employee_id
-     WHERE s.weekly_score_updated = ?
-     ORDER BY s.weekly_score DESC
+     WHERE s.weekly_coins_updated = ?
+     ORDER BY s.weekly_coins DESC
      LIMIT 3`
   ).bind(weekStart).all();
 
   const lines = rankingRows.results.map((row, index) => {
-    return `${index + 1}位: ${row.nickname}（${row.weekly_score}pt）`;
+    return `${index + 1}位: ${row.nickname}（${row.weekly_coins}枚）`;
   });
 
   const message = lines.length
-    ? `【Compliance Quest 週次ランキング】\n${lines.join('\n')}`
+    ? `【Compliance Quest 週次ランキング（週間コイン）】\n${lines.join('\n')}`
     : '【Compliance Quest 週次ランキング】今週の記録はまだありません。';
 
   await sendSlack(c.env, 'weekly_top3', message, { weekStart });

@@ -54,6 +54,7 @@ export interface UserStats {
   mixedKills: number;
   streakDays: number;
   weeklyScore: number;
+  weeklyCoins: number;
   lastLoginAt: string | null;
 }
 
