@@ -52,7 +52,7 @@ const situations = [
   '緊急度が高い案件だった',
 ];
 
-const legalStoryQuestions: QuestionData[] = [
+export const legalStoryQuestions: QuestionData[] = [
   {
     domain: 'legal',
     tribe: '幻影族',
