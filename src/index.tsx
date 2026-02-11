@@ -3,7 +3,7 @@ import { cors } from 'hono/cors';
 import { serveStatic } from 'hono/cloudflare-workers';
 import type { Bindings, QuestionData, StoryProgress, TownStatus, UserProfile, UserStats } from './types';
 import { chapters, getChapter, getNextChapter } from './story-data';
-import { generateQuestions } from './questions-data';
+import { generateQuestions, legalStoryQuestions } from './questions-data';
 
 const app = new Hono<{ Bindings: Bindings }>();
 
@@ -229,30 +229,46 @@ async function ensureCoreSchema(DB: D1Database) {
 async function ensureQuestionsSeeded(DB: D1Database) {
   const countRow = await DB.prepare('SELECT COUNT(*) as count FROM questions').first();
   const count = (countRow?.count as number) || 0;
-  if (count >= 500) return;
 
-  const questions = generateQuestions();
-  const batches: D1PreparedStatement[] = [];
+  const insertQuestions = async (questions: QuestionData[]) => {
+    const batches: D1PreparedStatement[] = [];
+    for (const question of questions) {
+      const statement = DB.prepare(
+        `INSERT INTO questions (domain, tribe, difficulty, question_text, choices, correct_index, explanation)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`
+      ).bind(
+        question.domain,
+        question.tribe,
+        question.difficulty,
+        question.questionText,
+        JSON.stringify(question.choices),
+        question.correctIndex,
+        question.explanation
+      );
+      batches.push(statement);
+    }
 
-  for (const question of questions) {
-    const statement = DB.prepare(
-      `INSERT INTO questions (domain, tribe, difficulty, question_text, choices, correct_index, explanation)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`
-    ).bind(
-      question.domain,
-      question.tribe,
-      question.difficulty,
-      question.questionText,
-      JSON.stringify(question.choices),
-      question.correctIndex,
-      question.explanation
-    );
-    batches.push(statement);
+    const chunkSize = 50;
+    for (let i = 0; i < batches.length; i += chunkSize) {
+      await DB.batch(batches.slice(i, i + chunkSize));
+    }
+  };
+
+  if (count === 0) {
+    await insertQuestions(generateQuestions());
+    return;
   }
 
-  const chunkSize = 50;
-  for (let i = 0; i < batches.length; i += chunkSize) {
-    await DB.batch(batches.slice(i, i + chunkSize));
+  const signature = legalStoryQuestions[0]?.questionText;
+  if (signature) {
+    const legalRow = await DB.prepare(
+      'SELECT COUNT(*) as count FROM questions WHERE domain = ? AND question_text = ?'
+    ).bind('legal', signature).first();
+
+    if (((legalRow?.count as number) || 0) === 0) {
+      await DB.prepare('DELETE FROM questions WHERE domain = ?').bind('legal').run();
+      await insertQuestions(legalStoryQuestions);
+    }
   }
 }
 

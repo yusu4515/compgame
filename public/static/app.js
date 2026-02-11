@@ -42,8 +42,14 @@ const CharacterImages = {
   乾いた村の長老: '乾いた村の長老.png',
   村の治療師: '村の治療師.png',
   旅の商人: '旅の商人.png',
+  旅の商人（行商人）: '旅の商人.png',
+  市場の商人（幻影）: '旅の商人.png',
+  商人A: '旅の商人.png',
   若き旅人: '若き旅人.png',
   市場の番人: '市場の番人.png',
+  冷酷な店主: '市場の番人.png',
+  苦悩する客: '村の若者.png',
+  小人の妖精: '森の妖精.png',
   村の若者: '村の若者.png',
   砂漠の契約魔導師: '砂漠の契約魔導士.png',
   密約の仲介人: '密約の仲介人.png',
@@ -139,7 +145,7 @@ function markEncounteredCharacter(name) {
 
 function parseEpisodeMeta(text) {
   if (!text) return null;
-  const match = text.match(/第(\d+)話「([^」]+)」/);
+  const match = text.match(/第(\d+)話[「:：・]\s*([^」]+?)(?:」|$)/);
   return match ? { no: match[1], title: match[2] } : null;
 }
 
@@ -1145,8 +1151,17 @@ function renderStoryScene() {
     : story.waitingQuiz || story.quizResult
     ? 'クイズに こたえよう'
     : 'クリックで つぎへ';
-  const leftMeta = resolveRoleMeta('hero', chapter, heroName, heroPortrait);
-  const rightMeta = resolveRoleMeta(lineMeta.partnerRole === 'enemy' ? 'enemy' : 'ally', chapter, heroName, heroPortrait);
+  const heroMeta = resolveRoleMeta('hero', chapter, heroName, heroPortrait);
+  const speakerMeta = {
+    name: lineMeta.speakerName,
+    image: lineMeta.portrait,
+    role: lineMeta.role,
+  };
+  const partnerMeta = lineMeta.role === 'hero'
+    ? resolveRoleMeta(lineMeta.partnerRole === 'enemy' ? 'enemy' : 'ally', chapter, heroName, heroPortrait)
+    : heroMeta;
+  const leftMeta = lineMeta.role === 'hero' ? speakerMeta : heroMeta;
+  const rightMeta = lineMeta.role === 'hero' ? partnerMeta : speakerMeta;
   const activeRole = lineMeta.role;
 
   markEncounteredCharacter(leftMeta.name);
