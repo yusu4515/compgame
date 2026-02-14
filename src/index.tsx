@@ -3,7 +3,7 @@ import { cors } from 'hono/cors';
 import { serveStatic } from 'hono/cloudflare-workers';
 import type { Bindings, QuestionData, StoryProgress, TownStatus, UserProfile, UserStats } from './types';
 import { chapters, getChapter, getNextChapter } from './story-data';
-import { generateQuestions, legalStoryQuestions } from './questions-data';
+import { financeStoryQuestions, generateQuestions, legalStoryQuestions } from './questions-data';
 
 const app = new Hono<{ Bindings: Bindings }>();
 
@@ -270,6 +270,19 @@ async function ensureQuestionsSeeded(DB: D1Database) {
       await insertQuestions(legalStoryQuestions);
     }
   }
+
+  const financeSignature = financeStoryQuestions[0]?.questionText;
+  if (financeSignature) {
+    const financeRow = await DB.prepare(
+      'SELECT COUNT(*) as count FROM questions WHERE domain = ? AND question_text = ?'
+    ).bind('finance', financeSignature).first();
+
+    if (((financeRow?.count as number) || 0) === 0) {
+      await DB.prepare('DELETE FROM questions WHERE domain = ?').bind('finance').run();
+      await insertQuestions(financeStoryQuestions);
+    }
+  }
+
 }
 
 async function ensureTitlesSeeded(DB: D1Database) {
