@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run dev:*)",
+      "Bash(npm install:*)",
+      "Bash(python -c \"\nimport json\nimport sys\n\nline = sys.stdin.read\\(\\).strip\\(\\)\ndata = json.loads\\(line\\)\ntext = data[''message''][''content''][0][''text'']\n\n# Save to a clean text file\nwith open\\(''/tmp/user_questions.txt'', ''w'', encoding=''utf-8''\\) as f:\n    f.write\\(text\\)\n\nprint\\(''Questions extracted - file size:'', len\\(text\\), ''characters''\\)\n\")",
+      "Bash(python -c:*)"
+    ]
+  }
+}
